@@ -194,7 +194,7 @@ async function main() {
   });
 
   const operatorEmail = (
-    process.env.SEED_OPERATOR_EMAIL ?? "operator@solenis.local"
+    process.env.SEED_OPERATOR_EMAIL ?? "operator@solenis.com"
   ).toLowerCase();
   const operatorPassword =
     process.env.SEED_OPERATOR_PASSWORD ?? "changeme";
