@@ -1,7 +1,6 @@
 import { formatMelbourneDateTime, melbourneDateYmd } from "~/lib/datetime";
 import type { InspectionAnswerRecord } from "~/lib/inspections";
 import {
-  DEFAULT_SECTION_SIGNATURE_KEY,
   sectionSignatureKey,
   sectionSignatureLabel,
 } from "~/lib/inspections";
@@ -80,10 +79,14 @@ function formatActionLine(
   return lines.join("\n");
 }
 
-function signatureKeyForDocumentGroupTitle(title: string): string {
-  return title === "Answers"
-    ? DEFAULT_SECTION_SIGNATURE_KEY
-    : sectionSignatureKey(title);
+function signatureKeyForDocumentGroup(
+  title: string,
+  sectionId: string | null,
+): string {
+  return sectionSignatureKey(
+    title === "Answers" ? null : title,
+    sectionId,
+  );
 }
 
 export function buildInspectionDocument(
@@ -128,7 +131,7 @@ export function buildInspectionDocument(
     });
 
     if (hasSectionSignatures) {
-      const key = signatureKeyForDocumentGroupTitle(group.title);
+      const key = signatureKeyForDocumentGroup(group.title, group.sectionId);
       const imageDataUrl = sectionSignatures[key] ?? null;
       blocks.push({
         kind: "signatures",

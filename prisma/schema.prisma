@@ -211,12 +211,29 @@ model Inspection {
   updatedAt            DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
   runs                 InspectionRun[]
   questions            InspectionQuestion[]
+  sections             InspectionSection[]
   versions             InspectionVersion[]
   actions              InspectionAction[]
   permitRuns           PermitRun[]
 
   @@index([templateInspectionId])
   @@map("inspections")
+}
+
+model InspectionSection {
+  id                String               @id @default(cuid())
+  inspectionId      String               @map("inspection_id")
+  inspection        Inspection           @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  title             String
+  requiresSignature Boolean              @default(true) @map("requires_signature")
+  sortOrder         Int                  @default(0) @map("sort_order")
+  isActive          Boolean              @default(true) @map("is_active")
+  createdAt         DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
+  questions         InspectionQuestion[]
+
+  @@index([inspectionId, isActive, sortOrder])
+  @@map("inspection_sections")
 }
 
 model InspectionVersion {
@@ -241,6 +258,8 @@ model InspectionQuestion {
   inspection      Inspection              @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
   label           String
   helpText        String?                 @map("help_text")
+  sectionId       String?                 @map("section_id")
+  section         InspectionSection?      @relation(fields: [sectionId], references: [id], onDelete: SetNull)
   sectionTitle    String?                 @map("section_title")
   type            InspectionQuestionType
   options         Json?

@@ -11,6 +11,7 @@ const {
   filterQuestionsForEquipment,
   readShiftAnswer,
   sectionSignatureKey,
+  sectionSignatureKeysForDefinition,
   sectionSignatureKeysForQuestions,
 } = await import("../../app/lib/inspections.ts");
 const { createInspectionSchema } = await import(
@@ -216,6 +217,59 @@ const unitQuestions = filterQuestionsForEquipment(
       row.path[1] === "Before start",
   );
   assert.ok(issue, "expected required error on Before start signature");
+}
+
+{
+  const managedDefinition = {
+    ...FORKLIFT_DAILY_CHECK_TEMPLATE,
+    sections: [
+      {
+        id: "sec-before",
+        title: "Before start",
+        requiresSignature: true,
+        sortOrder: 0,
+      },
+      {
+        id: "sec-after",
+        title: "After start",
+        requiresSignature: false,
+        sortOrder: 1,
+      },
+    ],
+    questions: FORKLIFT_DAILY_CHECK_TEMPLATE.questions.map((question) => {
+      const title = question.sectionTitle?.trim() ?? "";
+      if (title === "Before start") {
+        return { ...question, sectionId: "sec-before" };
+      }
+      if (title === "After start") {
+        return { ...question, sectionId: "sec-after" };
+      }
+      return question;
+    }),
+  };
+  const schema = createInspectionSchema(managedDefinition);
+  const applicable = filterQuestionsForContext(managedDefinition.questions, {
+    shift: "Day",
+    isFirstInspectionOfWeek: true,
+  });
+  const responses = fillRequired(applicable, {
+    "forklift-daily-check__shift": "Day",
+  });
+  const signatureKeys = sectionSignatureKeysForDefinition(
+    managedDefinition,
+    applicable,
+  );
+  assert.deepEqual(signatureKeys, ["sec-before"]);
+  const parsedMissing = schema.safeParse({
+    ...basePayload(responses, applicable),
+    sectionSignatures: {},
+  });
+  assert.equal(parsedMissing.success, false);
+  const parsedOk = schema.safeParse({
+    ...basePayload(responses, applicable),
+    sectionSignatures: { "sec-before": "JD" },
+  });
+  assert.equal(parsedOk.success, true);
 }
 
 {

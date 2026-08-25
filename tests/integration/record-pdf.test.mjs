@@ -114,6 +114,7 @@ assert.equal(buildRecordFilename(["", null]), "record.pdf");
   const groups = groupAnswersForDocument(answers);
   assert.equal(groups.length, 2);
   assert.equal(groups[0].title, "Permit details");
+  assert.equal(groups[0].sectionId, null);
   assert.equal(groups[0].fields.length, 2);
   assert.equal(groups[0].fields[0].value, "17 Aug 2026");
   assert.equal(groups[0].fields[1].value, "—");

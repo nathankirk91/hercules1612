@@ -105,6 +105,8 @@ export type InspectionQuestionDef = {
   id: string;
   label: string;
   helpText?: string | null;
+  /** Managed checklist section (when configured in the database). */
+  sectionId?: string | null;
   sectionTitle?: string | null;
   type: InspectionQuestionType;
   /** Choices for RADIO (and display labels for YES_NO). */
@@ -140,6 +142,13 @@ export type InspectionQuestionDef = {
   sortOrder: number;
 };
 
+export type InspectionSectionDef = {
+  id: string;
+  title: string;
+  requiresSignature: boolean;
+  sortOrder: number;
+};
+
 export type InspectionDefinition = {
   id: string;
   slug: string;
@@ -167,6 +176,8 @@ export type InspectionDefinition = {
   /** Extra guidance shown above the checklist (e.g. Form 78 instructions). */
   instructionNotes?: string | null;
   isAvailable: boolean;
+  /** When omitted on static definitions, derived from question section titles. */
+  sections?: InspectionSectionDef[];
   questions: InspectionQuestionDef[];
 };
 
@@ -183,6 +194,7 @@ export type InspectionCard = {
 export type InspectionAnswerRecord = {
   questionId: string;
   label: string;
+  sectionId?: string | null;
   sectionTitle: string | null;
   type: InspectionQuestionType;
   answer: string;
@@ -513,6 +525,7 @@ export type ChecklistQuestionKind = "inspection" | "permit";
 export type ChecklistQuestionPayload = {
   label: string;
   helpText: string;
+  sectionId: string;
   sectionTitle: string;
   type: InspectionQuestionType;
   options: string[];
@@ -547,9 +560,11 @@ export function parseChecklistQuestionFormData(
     .filter(Boolean);
 
   const attentionRaw = formData.getAll("attentionValues").map(String);
+  const sectionId = String(formData.get("sectionId") ?? "").trim();
   const base = {
     label: String(formData.get("label") ?? ""),
     helpText: String(formData.get("helpText") ?? ""),
+    sectionId,
     sectionTitle: String(formData.get("sectionTitle") ?? ""),
     type,
     options,
@@ -1539,6 +1554,7 @@ export function buildAnswersFromResponses(
     return {
       questionId: question.id,
       label: question.label,
+      sectionId: question.sectionId ?? null,
       sectionTitle: question.sectionTitle ?? null,
       type: question.type,
       answer,
@@ -1732,23 +1748,92 @@ export function readShiftAnswer(
 
 export function groupQuestionsBySection(
   questions: InspectionQuestionDef[],
-): Array<{ title: string | null; questions: InspectionQuestionDef[] }> {
-  const groups: Array<{
-    title: string | null;
-    questions: InspectionQuestionDef[];
-  }> = [];
+  sections: InspectionSectionDef[] = [],
+): Array<{
+  id: string | null;
+  title: string | null;
+  requiresSignature: boolean;
+  questions: InspectionQuestionDef[];
+}> {
+  if (sections.length === 0) {
+    const groups: Array<{
+      id: string | null;
+      title: string | null;
+      requiresSignature: boolean;
+      questions: InspectionQuestionDef[];
+    }> = [];
+
+    for (const question of questions) {
+      const title = question.sectionTitle?.trim() || null;
+      const key = sectionSignatureKey(title);
+      const existing = groups.find(
+        (group) => sectionSignatureKey(group.title) === key,
+      );
+      if (existing) {
+        existing.questions.push(question);
+      } else {
+        groups.push({
+          id: null,
+          title,
+          requiresSignature: true,
+          questions: [question],
+        });
+      }
+    }
+
+    return groups;
+  }
+
+  const sectionById = new Map(sections.map((section) => [section.id, section]));
+  const grouped = new Map<
+    string,
+    {
+      id: string;
+      title: string;
+      requiresSignature: boolean;
+      questions: InspectionQuestionDef[];
+    }
+  >();
+  const unsectioned: InspectionQuestionDef[] = [];
 
   for (const question of questions) {
-    const title = question.sectionTitle?.trim() || null;
-    const existing = groups.find((group) => group.title === title);
+    const sectionId = question.sectionId?.trim() || "";
+    if (!sectionId) {
+      unsectioned.push(question);
+      continue;
+    }
+    const section = sectionById.get(sectionId);
+    if (!section) {
+      unsectioned.push(question);
+      continue;
+    }
+    const existing = grouped.get(sectionId);
     if (existing) {
       existing.questions.push(question);
     } else {
-      groups.push({ title, questions: [question] });
+      grouped.set(sectionId, {
+        id: section.id,
+        title: section.title,
+        requiresSignature: section.requiresSignature,
+        questions: [question],
+      });
     }
   }
 
-  return groups;
+  const ordered = sections
+    .filter((section) => grouped.has(section.id))
+    .map((section) => grouped.get(section.id)!);
+
+  if (unsectioned.length > 0) {
+    ordered.push({
+      id: DEFAULT_SECTION_SIGNATURE_KEY,
+      title: null,
+      requiresSignature: true,
+      questions: unsectioned,
+    });
+  }
+
+  return ordered;
 }
 
 /** Form/storage key for a section signature when the section has no title. */
@@ -1757,24 +1842,36 @@ export const DEFAULT_SECTION_SIGNATURE_KEY = "__default__";
 /** Stable key for per-section inspection signatures. */
 export function sectionSignatureKey(
   sectionTitle: string | null | undefined,
+  sectionId?: string | null,
 ): string {
+  const id = sectionId?.trim();
+  if (id) {
+    return id;
+  }
   const trimmed = sectionTitle?.trim() || "";
   return trimmed || DEFAULT_SECTION_SIGNATURE_KEY;
 }
 
 /** Human label for a section signature key. */
-export function sectionSignatureLabel(sectionKey: string): string {
+export function sectionSignatureLabel(
+  sectionKey: string,
+  sections: InspectionSectionDef[] = [],
+): string {
+  const match = sections.find((section) => section.id === sectionKey);
+  if (match) {
+    return match.title;
+  }
   return sectionKey === DEFAULT_SECTION_SIGNATURE_KEY ? "Section" : sectionKey;
 }
 
-/** Keys for every distinct section in a question list (definition or filtered). */
+/** Keys for every distinct section in a question list (legacy — all require signatures). */
 export function sectionSignatureKeysForQuestions(
-  questions: Array<Pick<InspectionQuestionDef, "sectionTitle">>,
+  questions: Array<Pick<InspectionQuestionDef, "sectionTitle" | "sectionId">>,
 ): string[] {
   const keys: string[] = [];
   const seen = new Set<string>();
   for (const question of questions) {
-    const key = sectionSignatureKey(question.sectionTitle);
+    const key = sectionSignatureKey(question.sectionTitle, question.sectionId);
     if (seen.has(key)) {
       continue;
     }
@@ -1782,6 +1879,66 @@ export function sectionSignatureKeysForQuestions(
     keys.push(key);
   }
   return keys;
+}
+
+/** Signature keys for visible sections that require a sign-off. */
+export function sectionSignatureKeysForDefinition(
+  definition: Pick<InspectionDefinition, "sections" | "questions">,
+  visibleQuestions: InspectionQuestionDef[],
+): string[] {
+  const sections = resolveInspectionSections(definition);
+  if (sections.length === 0 || !definition.sections?.length) {
+    return sectionSignatureKeysForQuestions(visibleQuestions);
+  }
+
+  const visibleSectionIds = new Set<string>();
+  for (const question of visibleQuestions) {
+    const sectionId = question.sectionId?.trim();
+    if (sectionId) {
+      visibleSectionIds.add(sectionId);
+    }
+  }
+
+  return sections
+    .filter(
+      (section) =>
+        section.requiresSignature && visibleSectionIds.has(section.id),
+    )
+    .map((section) => section.id);
+}
+
+/** Resolved checklist sections (DB-managed or derived from question titles). */
+export function resolveInspectionSections(
+  definition: Pick<InspectionDefinition, "sections" | "questions">,
+): InspectionSectionDef[] {
+  if (definition.sections && definition.sections.length > 0) {
+    return definition.sections;
+  }
+  return deriveSectionsFromQuestions(definition.questions);
+}
+
+/** Build section rows from distinct question section titles (static fallbacks). */
+export function deriveSectionsFromQuestions(
+  questions: InspectionQuestionDef[],
+): InspectionSectionDef[] {
+  const sections: InspectionSectionDef[] = [];
+  const seen = new Set<string>();
+
+  for (const question of questions) {
+    const title = question.sectionTitle?.trim();
+    if (!title || seen.has(title)) {
+      continue;
+    }
+    seen.add(title);
+    sections.push({
+      id: sectionSignatureKey(title),
+      title,
+      requiresSignature: true,
+      sortOrder: sections.length,
+    });
+  }
+
+  return sections;
 }
 
 export function parseStringArray(value: unknown): string[] {

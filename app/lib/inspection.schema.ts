@@ -5,6 +5,8 @@ import {
   filterQuestionsForContext,
   parseCheckboxAnswer,
   readShiftAnswer,
+  resolveInspectionSections,
+  sectionSignatureKeysForDefinition,
   sectionSignatureKeysForQuestions,
   sectionSignatureLabel,
   summarizeInspectionAnswers,
@@ -108,7 +110,13 @@ export function createInspectionFormSchema(
     }
   }
 
-  for (const key of sectionSignatureKeysForQuestions(definition.questions)) {
+  const managedSections = resolveInspectionSections(definition);
+  const signatureShapeKeys =
+    managedSections.length > 0 && definition.sections?.length
+      ? managedSections.map((section) => section.id)
+      : sectionSignatureKeysForQuestions(definition.questions);
+
+  for (const key of signatureShapeKeys) {
     sectionSignatureShape[key] = z.preprocess(
       emptyToUndefined,
       z.string().min(1, "Please sign or initial this section.").optional(),
@@ -207,12 +215,15 @@ export function createInspectionFormSchema(
         }
       }
 
-      for (const key of sectionSignatureKeysForQuestions(applicableQuestions)) {
+      for (const key of sectionSignatureKeysForDefinition(
+        definition,
+        applicableQuestions,
+      )) {
         const signature = value.sectionSignatures?.[key];
         if (signature == null || String(signature).trim() === "") {
           ctx.addIssue({
             code: "custom",
-            message: `Please sign or initial ${sectionSignatureLabel(key)}.`,
+            message: `Please sign or initial ${sectionSignatureLabel(key, managedSections)}.`,
             path: ["sectionSignatures", key],
           });
         }
@@ -243,7 +254,10 @@ export function createInspectionSchema(
     );
     const summary = summarizeInspectionAnswers(answers);
 
-    const applicableKeys = sectionSignatureKeysForQuestions(applicableQuestions);
+    const applicableKeys = sectionSignatureKeysForDefinition(
+      definition,
+      applicableQuestions,
+    );
     const sectionSignatures: Record<string, string> = {};
     for (const key of applicableKeys) {
       sectionSignatures[key] = String(value.sectionSignatures?.[key] ?? "").trim();

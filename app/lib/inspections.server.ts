@@ -27,6 +27,7 @@ import {
   type InspectionDefinition,
   type InspectionQuestionDef,
   type InspectionQuestionType,
+  type InspectionSectionDef,
   type InspectionResponseRow,
   type InspectionSummary,
   type LastInspectionAnswers,
@@ -102,6 +103,7 @@ export type InspectionVersionSnapshot = {
   description: string;
   category: string;
   equipmentLabel: string | null;
+  sections: InspectionSectionDef[];
   questions: InspectionQuestionDef[];
 };
 
@@ -203,7 +205,7 @@ function isMissingInspectionSchemaError(error: unknown): boolean {
     return true;
   }
   const message = error instanceof Error ? error.message : String(error);
-  return /applicable_shifts|first_of_week_only|applicable_equipment_refs|show_last_value|template_inspection_id|fixed_equipment_ref|does not exist|ColumnNotFound/i.test(
+  return /applicable_shifts|first_of_week_only|applicable_equipment_refs|show_last_value|template_inspection_id|fixed_equipment_ref|section_id|inspection_sections|does not exist|ColumnNotFound/i.test(
     message,
   );
 }
@@ -213,10 +215,25 @@ async function ensureInspectionSchemaReady(): Promise<void> {
   await ensureInspectionSchema();
 }
 
+function mapSection(row: {
+  id: string;
+  title: string;
+  requiresSignature: boolean;
+  sortOrder: number;
+}): InspectionSectionDef {
+  return {
+    id: row.id,
+    title: row.title,
+    requiresSignature: row.requiresSignature,
+    sortOrder: row.sortOrder,
+  };
+}
+
 function mapQuestion(row: {
   id: string;
   label: string;
   helpText: string | null;
+  sectionId?: string | null;
   sectionTitle: string | null;
   type: InspectionQuestionType;
   options: unknown;
@@ -242,6 +259,7 @@ function mapQuestion(row: {
     id: row.id,
     label: row.label,
     helpText: row.helpText,
+    sectionId: row.sectionId ?? null,
     sectionTitle: row.sectionTitle,
     type: row.type,
     options,
@@ -274,10 +292,17 @@ function mapDefinition(row: {
   fixedEquipmentRef?: string | null;
   isAvailable: boolean;
   sortOrder: number;
+  sections?: Array<{
+    id: string;
+    title: string;
+    requiresSignature: boolean;
+    sortOrder: number;
+  }>;
   questions: Array<{
     id: string;
     label: string;
     helpText: string | null;
+    sectionId?: string | null;
     sectionTitle: string | null;
     type: InspectionQuestionType;
     options: unknown;
@@ -305,6 +330,7 @@ function mapDefinition(row: {
     fixedEquipmentRef: row.fixedEquipmentRef ?? null,
     isAvailable: row.isAvailable,
     sortOrder: row.sortOrder,
+    sections: (row.sections ?? []).map(mapSection),
     questions: row.questions.map(mapQuestion),
   };
 }
@@ -398,6 +424,10 @@ async function getInspectionDefinitionOnce(
       OR: [{ id: idOrSlug }, { slug: idOrSlug }],
     },
     include: {
+      sections: {
+        where: { isActive: true },
+        orderBy: { sortOrder: "asc" },
+      },
       questions: {
         where: { isActive: true },
         orderBy: { sortOrder: "asc" },
@@ -410,12 +440,17 @@ async function getInspectionDefinitionOnce(
   }
 
   let questions = row.questions;
+  let sections = row.sections;
   let shortNameFallback: string | undefined;
 
   if (row.templateInspectionId) {
     const template = await prisma.inspection.findUnique({
       where: { id: row.templateInspectionId },
       include: {
+        sections: {
+          where: { isActive: true },
+          orderBy: { sortOrder: "asc" },
+        },
         questions: {
           where: { isActive: true },
           orderBy: { sortOrder: "asc" },
@@ -424,11 +459,12 @@ async function getInspectionDefinitionOnce(
     });
     if (template) {
       questions = template.questions;
+      sections = template.sections;
     }
     shortNameFallback = getFallbackInspectionByIdOrSlug(row.id)?.shortName;
   }
 
-  const definition = mapDefinition({ ...row, questions });
+  const definition = mapDefinition({ ...row, questions, sections });
   if (shortNameFallback) {
     definition.shortName = shortNameFallback;
   }
@@ -605,12 +641,20 @@ async function getManagedInspectionOnce(
   const row = await prisma.inspection.findUnique({
     where: { id },
     include: {
+      sections: {
+        where: { isActive: true },
+        orderBy: { sortOrder: "asc" },
+      },
       questions: {
         where: { isActive: true },
         orderBy: { sortOrder: "asc" },
       },
       template: {
         include: {
+          sections: {
+            where: { isActive: true },
+            orderBy: { sortOrder: "asc" },
+          },
           questions: {
             where: { isActive: true },
             orderBy: { sortOrder: "asc" },
@@ -661,6 +705,9 @@ async function getManagedInspectionOnce(
   const questionRows = inheritsQuestions
     ? row.template!.questions
     : row.questions;
+  const sectionRows = inheritsQuestions
+    ? row.template!.sections
+    : row.sections;
   const versionRows = inheritsQuestions ? row.template!.versions : row.versions;
   const versionNumber = inheritsQuestions
     ? (row.template!.version ?? 1)
@@ -679,13 +726,18 @@ async function getManagedInspectionOnce(
   const hasUnpublishedChanges =
     !inheritsQuestions &&
     (latestPublished
-      ? checklistQuestionsDiffer(liveQuestions, latestPublished.questions)
-      : liveQuestions.length > 0);
+      ? checklistQuestionsDiffer(liveQuestions, latestPublished.questions) ||
+        checklistSectionsDiffer(
+          sectionRows.map(mapSection),
+          latestPublished.sections ?? [],
+        )
+      : liveQuestions.length > 0 || sectionRows.length > 0);
 
   const definition = mergeStaticDefinitionMeta(
     mapDefinition({
       ...row,
       questions: questionRows,
+      sections: sectionRows,
     }),
   );
 
@@ -740,6 +792,7 @@ function parseVersionSnapshot(value: unknown): InspectionVersionSnapshot {
           id: String(row.id ?? ""),
           label: String(row.label ?? ""),
           helpText: row.helpText ? String(row.helpText) : null,
+          sectionId: row.sectionId ? String(row.sectionId) : null,
           sectionTitle: row.sectionTitle ? String(row.sectionTitle) : null,
           type,
           options,
@@ -762,6 +815,17 @@ function parseVersionSnapshot(value: unknown): InspectionVersionSnapshot {
         } satisfies InspectionQuestionDef;
       })
     : [];
+  const sections = Array.isArray(snapshot.sections)
+    ? snapshot.sections.map((section) => {
+        const row = section as Partial<InspectionSectionDef>;
+        return {
+          id: String(row.id ?? ""),
+          title: String(row.title ?? ""),
+          requiresSignature: row.requiresSignature !== false,
+          sortOrder: Number(row.sortOrder ?? 0),
+        } satisfies InspectionSectionDef;
+      })
+    : [];
 
   return {
     title: String(snapshot.title ?? ""),
@@ -770,6 +834,7 @@ function parseVersionSnapshot(value: unknown): InspectionVersionSnapshot {
     equipmentLabel: snapshot.equipmentLabel
       ? String(snapshot.equipmentLabel)
       : null,
+    sections,
     questions,
   };
 }
@@ -809,6 +874,7 @@ function normalizeQuestionsForCompare(questions: InspectionQuestionDef[]) {
       id: question.id,
       label: question.label,
       helpText: question.helpText ?? null,
+      sectionId: question.sectionId ?? null,
       sectionTitle: question.sectionTitle ?? null,
       type: question.type,
       options,
@@ -822,6 +888,25 @@ function normalizeQuestionsForCompare(questions: InspectionQuestionDef[]) {
       sortOrder: question.sortOrder,
     };
   });
+}
+
+function normalizeSectionsForCompare(sections: InspectionSectionDef[]) {
+  return sections.map((section) => ({
+    id: section.id,
+    title: section.title,
+    requiresSignature: section.requiresSignature,
+    sortOrder: section.sortOrder,
+  }));
+}
+
+function checklistSectionsDiffer(
+  left: InspectionSectionDef[],
+  right: InspectionSectionDef[],
+): boolean {
+  return (
+    JSON.stringify(normalizeSectionsForCompare(left)) !==
+    JSON.stringify(normalizeSectionsForCompare(right))
+  );
 }
 
 function checklistQuestionsDiffer(
@@ -845,6 +930,10 @@ async function buildInspectionSnapshot(
   const row = await prisma.inspection.findUnique({
     where: { id: inspectionId },
     include: {
+      sections: {
+        where: { isActive: true },
+        orderBy: { sortOrder: "asc" },
+      },
       questions: {
         where: { isActive: true },
         orderBy: { sortOrder: "asc" },
@@ -860,6 +949,7 @@ async function buildInspectionSnapshot(
     description: row.description,
     category: row.category,
     equipmentLabel: row.equipmentLabel,
+    sections: row.sections.map(mapSection),
     questions: row.questions.map(mapQuestion),
   };
 }
@@ -1016,6 +1106,10 @@ export async function publishInspectionVersion(args: {
     !checklistQuestionsDiffer(
       liveSnapshot.questions,
       parseVersionSnapshot(latest.snapshot).questions,
+    ) &&
+    !checklistSectionsDiffer(
+      liveSnapshot.sections,
+      parseVersionSnapshot(latest.snapshot).sections ?? [],
     )
   ) {
     throw new Error("No unpublished checklist changes to publish.");
@@ -1354,10 +1448,202 @@ async function clearConflictingPermitFieldRoles(args: {
   });
 }
 
+async function resolveQuestionSectionFields(args: {
+  inspectionId: string;
+  sectionId?: string;
+  sectionTitle?: string;
+}): Promise<{ sectionId: string | null; sectionTitle: string | null }> {
+  const prisma = getPrisma();
+  if (!prisma) {
+    throw new Error("Database is not configured.");
+  }
+
+  const sectionId = args.sectionId?.trim() || "";
+  if (!sectionId) {
+    return { sectionId: null, sectionTitle: null };
+  }
+
+  const section = await prisma.inspectionSection.findFirst({
+    where: {
+      id: sectionId,
+      inspectionId: args.inspectionId,
+      isActive: true,
+    },
+    select: { id: true, title: true },
+  });
+  if (!section) {
+    throw new Error("Select a valid section.");
+  }
+
+  return { sectionId: section.id, sectionTitle: section.title };
+}
+
+export async function addInspectionSection(args: {
+  inspectionId: string;
+  title: string;
+  requiresSignature?: boolean;
+}): Promise<InspectionSectionDef> {
+  await assertQuestionSourceInspection(args.inspectionId);
+  const prisma = getPrisma();
+  if (!prisma) {
+    throw new Error("Database is not configured.");
+  }
+
+  const title = args.title.trim();
+  if (!title) {
+    throw new Error("Section title is required.");
+  }
+
+  const maxSort = await prisma.inspectionSection.aggregate({
+    where: { inspectionId: args.inspectionId, isActive: true },
+    _max: { sortOrder: true },
+  });
+
+  const row = await prisma.inspectionSection.create({
+    data: {
+      inspectionId: args.inspectionId,
+      title,
+      requiresSignature: args.requiresSignature ?? true,
+      sortOrder: (maxSort._max.sortOrder ?? 0) + 1,
+      isActive: true,
+    },
+  });
+
+  return mapSection(row);
+}
+
+export async function updateInspectionSection(args: {
+  sectionId: string;
+  title: string;
+  requiresSignature: boolean;
+}): Promise<InspectionSectionDef> {
+  const prisma = getPrisma();
+  if (!prisma) {
+    throw new Error("Database is not configured.");
+  }
+
+  const title = args.title.trim();
+  if (!title) {
+    throw new Error("Section title is required.");
+  }
+
+  const existing = await prisma.inspectionSection.findFirst({
+    where: { id: args.sectionId, isActive: true },
+    select: { id: true, inspectionId: true },
+  });
+  if (!existing) {
+    throw new Error("Section not found.");
+  }
+  await assertQuestionSourceInspection(existing.inspectionId);
+
+  const row = await prisma.inspectionSection.update({
+    where: { id: args.sectionId },
+    data: {
+      title,
+      requiresSignature: args.requiresSignature,
+    },
+  });
+
+  await prisma.inspectionQuestion.updateMany({
+    where: {
+      inspectionId: existing.inspectionId,
+      sectionId: args.sectionId,
+      isActive: true,
+    },
+    data: { sectionTitle: title },
+  });
+
+  return mapSection(row);
+}
+
+export async function removeInspectionSection(args: {
+  sectionId: string;
+}): Promise<void> {
+  const prisma = getPrisma();
+  if (!prisma) {
+    throw new Error("Database is not configured.");
+  }
+
+  const existing = await prisma.inspectionSection.findFirst({
+    where: { id: args.sectionId, isActive: true },
+    select: { id: true, inspectionId: true },
+  });
+  if (!existing) {
+    throw new Error("Section not found.");
+  }
+  await assertQuestionSourceInspection(existing.inspectionId);
+
+  const assigned = await prisma.inspectionQuestion.count({
+    where: {
+      inspectionId: existing.inspectionId,
+      sectionId: args.sectionId,
+      isActive: true,
+    },
+  });
+  if (assigned > 0) {
+    throw new Error(
+      "Move or remove questions from this section before deleting it.",
+    );
+  }
+
+  await prisma.inspectionSection.update({
+    where: { id: args.sectionId },
+    data: { isActive: false },
+  });
+}
+
+export async function moveInspectionSection(args: {
+  sectionId: string;
+  direction: "up" | "down";
+}): Promise<void> {
+  const prisma = getPrisma();
+  if (!prisma) {
+    throw new Error("Database is not configured.");
+  }
+
+  const current = await prisma.inspectionSection.findFirst({
+    where: { id: args.sectionId, isActive: true },
+  });
+  if (!current) {
+    throw new Error("Section not found.");
+  }
+  await assertQuestionSourceInspection(current.inspectionId);
+
+  const neighbor = await prisma.inspectionSection.findFirst({
+    where: {
+      inspectionId: current.inspectionId,
+      isActive: true,
+      sortOrder:
+        args.direction === "up"
+          ? { lt: current.sortOrder }
+          : { gt: current.sortOrder },
+    },
+    orderBy: {
+      sortOrder: args.direction === "up" ? "desc" : "asc",
+    },
+  });
+
+  if (!neighbor) {
+    return;
+  }
+
+  await prisma.$transaction([
+    prisma.inspectionSection.update({
+      where: { id: current.id },
+      data: { sortOrder: neighbor.sortOrder },
+    }),
+    prisma.inspectionSection.update({
+      where: { id: neighbor.id },
+      data: { sortOrder: current.sortOrder },
+    }),
+  ]);
+}
+
 export async function addInspectionQuestion(args: {
   inspectionId: string;
   label: string;
   helpText?: string;
+  sectionId?: string;
   sectionTitle?: string;
   type: InspectionQuestionType;
   options?: string[];
@@ -1424,12 +1710,19 @@ export async function addInspectionQuestion(args: {
     });
   }
 
+  const sectionFields = await resolveQuestionSectionFields({
+    inspectionId: args.inspectionId,
+    sectionId: args.sectionId,
+    sectionTitle: args.sectionTitle,
+  });
+
   const row = await prisma.inspectionQuestion.create({
     data: {
       inspectionId: args.inspectionId,
       label,
       helpText: args.helpText?.trim() || null,
-      sectionTitle: args.sectionTitle?.trim() || null,
+      sectionId: sectionFields.sectionId,
+      sectionTitle: sectionFields.sectionTitle,
       type: args.type,
       options: optionsJsonForType(args.type, options),
       attentionValues: attentionJsonForType(args.type, normalizedAttention),
@@ -1487,6 +1780,7 @@ export async function updateInspectionQuestion(args: {
   questionId: string;
   label: string;
   helpText?: string;
+  sectionId?: string;
   sectionTitle?: string;
   type: InspectionQuestionType;
   options?: string[];
@@ -1557,12 +1851,19 @@ export async function updateInspectionQuestion(args: {
     });
   }
 
+  const sectionFields = await resolveQuestionSectionFields({
+    inspectionId: existing.inspectionId,
+    sectionId: args.sectionId,
+    sectionTitle: args.sectionTitle,
+  });
+
   const row = await prisma.inspectionQuestion.update({
     where: { id: args.questionId },
     data: {
       label,
       helpText: args.helpText?.trim() || null,
-      sectionTitle: args.sectionTitle?.trim() || null,
+      sectionId: sectionFields.sectionId,
+      sectionTitle: sectionFields.sectionTitle,
       type: args.type,
       options: optionsJsonForType(args.type, options),
       attentionValues: attentionJsonForType(args.type, normalizedAttention),
@@ -1708,6 +2009,7 @@ function parseAnswers(value: unknown): InspectionAnswerRecord[] {
       return {
         questionId: String(row.questionId ?? ""),
         label: String(row.label ?? ""),
+        sectionId: row.sectionId ? String(row.sectionId) : null,
         sectionTitle: row.sectionTitle ? String(row.sectionTitle) : null,
         type: isKnownQuestionType(row.type) ? row.type : "TEXT",
         answer: String(row.answer ?? ""),

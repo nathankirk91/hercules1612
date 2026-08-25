@@ -268,7 +268,10 @@ export default function InspectionSubmissionPage({
 
             <div className="grid gap-4">
               {groupAnswersBySection(run.answers).map((group) => {
-                const signatureKey = sectionSignatureKey(group.title);
+                const signatureKey = sectionSignatureKey(
+                  group.title,
+                  group.sectionId,
+                );
                 const sectionSignature =
                   run.sectionSignatures?.[signatureKey] ?? null;
                 return (
@@ -497,16 +500,22 @@ function AnswerBadge({
 function groupAnswersBySection(rows: InspectionAnswerRecord[]) {
   const groups: Array<{
     title: string | null;
+    sectionId: string | null;
     rows: InspectionAnswerRecord[];
   }> = [];
 
   for (const row of rows) {
     const title = row.sectionTitle;
-    const existing = groups.find((group) => group.title === title);
+    const sectionId = row.sectionId?.trim() || null;
+    const existing = groups.find(
+      (group) =>
+        group.title === title &&
+        (group.sectionId ?? null) === (sectionId ?? null),
+    );
     if (existing) {
       existing.rows.push(row);
     } else {
-      groups.push({ title, rows: [row] });
+      groups.push({ title, sectionId, rows: [row] });
     }
   }
 

@@ -31,14 +31,21 @@ import {
 } from "~/lib/inspections";
 import {
   addInspectionQuestion,
+  addInspectionSection,
   getManagedInspection,
   moveInspectionQuestion,
+  moveInspectionSection,
   publishInspectionVersion,
   removeInspectionQuestion,
+  removeInspectionSection,
   updateInspectionQuestion,
+  updateInspectionSection,
   updateManagedInspection,
   type InspectionVersionHistoryItem,
 } from "~/lib/inspections.server";
+import {
+  type InspectionSectionDef,
+} from "~/lib/inspections";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -180,6 +187,65 @@ export async function action({ request, params }: Route.ActionArgs) {
           "Question order updated. Publish a revision when your checklist edits are ready.",
       };
     }
+
+    if (intent === "add-section") {
+      await addInspectionSection({
+        inspectionId,
+        title: String(formData.get("title") ?? ""),
+        requiresSignature:
+          String(formData.get("requiresSignature") ?? "") === "on",
+      });
+      return {
+        ok: true as const,
+        message:
+          "Section added. Publish a revision when your checklist edits are ready.",
+      };
+    }
+
+    if (intent === "update-section") {
+      const sectionId = String(formData.get("sectionId") ?? "");
+      if (!sectionId) {
+        return data({ error: "Missing section." }, { status: 400 });
+      }
+      await updateInspectionSection({
+        sectionId,
+        title: String(formData.get("title") ?? ""),
+        requiresSignature:
+          String(formData.get("requiresSignature") ?? "") === "on",
+      });
+      return {
+        ok: true as const,
+        message:
+          "Section updated. Publish a revision when your checklist edits are ready.",
+      };
+    }
+
+    if (intent === "remove-section") {
+      const sectionId = String(formData.get("sectionId") ?? "");
+      if (!sectionId) {
+        return data({ error: "Missing section." }, { status: 400 });
+      }
+      await removeInspectionSection({ sectionId });
+      return {
+        ok: true as const,
+        message:
+          "Section removed. Publish a revision when your checklist edits are ready.",
+      };
+    }
+
+    if (intent === "move-section") {
+      const sectionId = String(formData.get("sectionId") ?? "");
+      const direction = String(formData.get("direction") ?? "");
+      if (!sectionId || (direction !== "up" && direction !== "down")) {
+        return data({ error: "Invalid move request." }, { status: 400 });
+      }
+      await moveInspectionSection({ sectionId, direction });
+      return {
+        ok: true as const,
+        message:
+          "Section order updated. Publish a revision when your checklist edits are ready.",
+      };
+    }
   } catch (error) {
     return data(
       {
@@ -193,6 +259,121 @@ export async function action({ request, params }: Route.ActionArgs) {
   }
 
   return data({ error: "Unknown action." }, { status: 400 });
+}
+
+function SectionEditor({
+  section,
+  index,
+  total,
+  isEditing,
+  onEdit,
+  onCancel,
+}: {
+  section: InspectionSectionDef;
+  index: number;
+  total: number;
+  isEditing: boolean;
+  onEdit: () => void;
+  onCancel: () => void;
+}) {
+  if (isEditing) {
+    return (
+      <li className="rounded-lg border border-border/70 bg-background/50 px-3 py-3">
+        <Form method="post" className="grid gap-4" onSubmit={onCancel}>
+          <input type="hidden" name="intent" value="update-section" />
+          <input type="hidden" name="sectionId" value={section.id} />
+          <p className="text-sm font-medium text-brand-navy">Edit section</p>
+          <div className="grid gap-2">
+            <Label htmlFor={`section-title-${section.id}`}>Section title</Label>
+            <Input
+              id={`section-title-${section.id}`}
+              name="title"
+              required
+              defaultValue={section.title}
+              autoComplete="off"
+            />
+          </div>
+          <label className="flex items-start gap-2 text-sm">
+            <input
+              type="checkbox"
+              name="requiresSignature"
+              defaultChecked={section.requiresSignature}
+              className="mt-0.5 size-4 accent-[var(--brand-navy)]"
+            />
+            <span>
+              Requires signature at end of section
+              <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
+                When checked, operators must sign or initial after completing
+                this section.
+              </span>
+            </span>
+          </label>
+          <div className="flex flex-wrap gap-2">
+            <Button type="submit">Save section</Button>
+            <Button type="button" variant="outline" onClick={onCancel}>
+              Cancel
+            </Button>
+          </div>
+        </Form>
+      </li>
+    );
+  }
+
+  return (
+    <li className="rounded-lg border border-border/70 bg-background/50 px-3 py-3">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-muted-foreground">#{index + 1}</span>
+            <p className="font-medium text-brand-navy">{section.title}</p>
+            {section.requiresSignature ? (
+              <Badge variant="secondary">Signature required</Badge>
+            ) : (
+              <Badge variant="outline">No signature</Badge>
+            )}
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Form method="post">
+            <input type="hidden" name="intent" value="move-section" />
+            <input type="hidden" name="sectionId" value={section.id} />
+            <input type="hidden" name="direction" value="up" />
+            <Button
+              type="submit"
+              variant="outline"
+              size="sm"
+              disabled={index === 0}
+            >
+              Move up
+            </Button>
+          </Form>
+          <Form method="post">
+            <input type="hidden" name="intent" value="move-section" />
+            <input type="hidden" name="sectionId" value={section.id} />
+            <input type="hidden" name="direction" value="down" />
+            <Button
+              type="submit"
+              variant="outline"
+              size="sm"
+              disabled={index >= total - 1}
+            >
+              Move down
+            </Button>
+          </Form>
+          <Button type="button" variant="outline" size="sm" onClick={onEdit}>
+            Edit
+          </Button>
+          <Form method="post">
+            <input type="hidden" name="intent" value="remove-section" />
+            <input type="hidden" name="sectionId" value={section.id} />
+            <Button type="submit" variant="outline" size="sm">
+              Remove
+            </Button>
+          </Form>
+        </div>
+      </div>
+    </li>
+  );
 }
 
 function formatVersionDate(value: Date | string) {
@@ -290,6 +471,10 @@ export default function InspectionsManageDetailPage({
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(
     null,
   );
+  const [editingSectionId, setEditingSectionId] = useState<string | null>(
+    null,
+  );
+  const sections = inspection.sections ?? [];
 
   return (
     <div className="app-shell">
@@ -433,6 +618,75 @@ export default function InspectionsManageDetailPage({
             </CardContent>
           </Card>
 
+          {!inspection.inheritsQuestions ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>Sections ({sections.length})</CardTitle>
+                <CardDescription>
+                  Define checklist sections here first, then assign each question
+                  to a section below. Toggle whether operators must sign at the
+                  end of each section.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-4">
+                <Form method="post" className="grid gap-4 rounded-lg border border-border/70 bg-background/50 p-4">
+                  <input type="hidden" name="intent" value="add-section" />
+                  <p className="text-sm font-medium text-brand-navy">
+                    Add section
+                  </p>
+                  <div className="grid gap-2">
+                    <Label htmlFor="section-title-new">Section title</Label>
+                    <Input
+                      id="section-title-new"
+                      name="title"
+                      required
+                      placeholder="e.g. Before start"
+                      autoComplete="off"
+                    />
+                  </div>
+                  <label className="flex items-start gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      name="requiresSignature"
+                      defaultChecked
+                      className="mt-0.5 size-4 accent-[var(--brand-navy)]"
+                    />
+                    <span>
+                      Requires signature at end of section
+                      <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
+                        Operators sign or initial after completing this section.
+                      </span>
+                    </span>
+                  </label>
+                  <div>
+                    <Button type="submit">Add section</Button>
+                  </div>
+                </Form>
+
+                {sections.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No sections yet. Add one above, then pick it when adding
+                    questions.
+                  </p>
+                ) : (
+                  <ul className="grid gap-3">
+                    {sections.map((section, index) => (
+                      <SectionEditor
+                        key={section.id}
+                        section={section}
+                        index={index}
+                        total={sections.length}
+                        isEditing={editingSectionId === section.id}
+                        onEdit={() => setEditingSectionId(section.id)}
+                        onCancel={() => setEditingSectionId(null)}
+                      />
+                    ))}
+                  </ul>
+                )}
+              </CardContent>
+            </Card>
+          ) : null}
+
           <Card>
             <CardHeader>
               <CardTitle>Add question</CardTitle>
@@ -485,6 +739,7 @@ export default function InspectionsManageDetailPage({
                     radioOptions={radioOptions}
                     setRadioOptions={setRadioOptions}
                     unitOptions={inspection.unitOptions}
+                    sections={sections}
                   />
                   <div>
                     <Button type="submit">Add question</Button>
@@ -562,6 +817,7 @@ export default function InspectionsManageDetailPage({
                       onEdit={() => setEditingQuestionId(question.id)}
                       onCancel={() => setEditingQuestionId(null)}
                       unitOptions={inspection.unitOptions}
+                      sections={sections}
                     />
                   ))}
                 </ul>

@@ -33,8 +33,9 @@ import {
   groupQuestionsBySection,
   isPermitInspection,
   parseCheckboxAnswer,
+  resolveInspectionSections,
   sectionSignatureKey,
-  sectionSignatureKeysForQuestions,
+  sectionSignatureKeysForDefinition,
   serializeCheckboxAnswer,
   type InspectionDefinition,
   type InspectionQuestionType,
@@ -107,7 +108,11 @@ export function InspectionChecklistForm({
     shift: selectedShift,
     isFirstInspectionOfWeek,
   });
-  const sections = groupQuestionsBySection(visibleQuestions);
+  const checklistSections = resolveInspectionSections(definition);
+  const sections = groupQuestionsBySection(
+    visibleQuestions,
+    checklistSections,
+  );
 
   const defaultResponses = Object.fromEntries(
     definition.questions.map((question) => [
@@ -129,10 +134,10 @@ export function InspectionChecklistForm({
       notes: "",
       actions: [""],
       sectionSignatures: Object.fromEntries(
-        sectionSignatureKeysForQuestions(definition.questions).map((key) => [
-          key,
-          "",
-        ]),
+        sectionSignatureKeysForDefinition(
+          definition,
+          definition.questions,
+        ).map((key) => [key, ""]),
       ),
       responses: defaultResponses,
     },
@@ -271,11 +276,12 @@ export function InspectionChecklistForm({
             ) : null}
 
             {sections.map((section, sectionIndex) => {
-              const signatureKey = sectionSignatureKey(section.title);
+              const signatureKey =
+                section.id ?? sectionSignatureKey(section.title);
               const signatureField = sectionSignatureFields[signatureKey];
               return (
               <section
-                key={section.title ?? `section-${sectionIndex}`}
+                key={section.id ?? section.title ?? `section-${sectionIndex}`}
                 className="grid gap-4"
               >
                 {section.title ? (
@@ -500,6 +506,7 @@ export function InspectionChecklistForm({
                     );
                   })}
                 </ul>
+                {section.requiresSignature ? (
                 <div className="grid gap-2 rounded-lg border border-border/70 bg-background/40 p-4">
                   <Label>
                     {section.title
@@ -516,6 +523,7 @@ export function InspectionChecklistForm({
                     error={signatureField?.errors?.join(" ")}
                   />
                 </div>
+                ) : null}
               </section>
               );
             })}

@@ -5,6 +5,7 @@ const {
   buildAnswersFromResponses,
   groupQuestionsBySection,
   sectionSignatureKey,
+  sectionSignatureKeysForDefinition,
   sectionSignatureKeysForQuestions,
   sectionSignatureLabel,
   summarizeInspectionAnswers,
@@ -439,6 +440,77 @@ function passResponses(definition) {
     sectionSignatureKeysForQuestions(FORKLIFT_DAILY_CHECK.questions),
     sections.map((section) => sectionSignatureKey(section.title)),
   );
+}
+
+{
+  const managedDefinition = {
+    sections: [
+      {
+        id: "sec-before",
+        title: "Before start",
+        requiresSignature: true,
+        sortOrder: 0,
+      },
+      {
+        id: "sec-after",
+        title: "After start",
+        requiresSignature: false,
+        sortOrder: 1,
+      },
+    ],
+    questions: [
+      {
+        id: "q1",
+        label: "Q1",
+        sectionId: "sec-before",
+        sectionTitle: "Before start",
+        type: "YES_NO",
+        options: [],
+        attentionValues: [],
+        required: true,
+        showLastValue: false,
+        applicableEquipmentRefs: [],
+        applicableShifts: [],
+        firstOfWeekOnly: false,
+        sortOrder: 0,
+      },
+      {
+        id: "q2",
+        label: "Q2",
+        sectionId: "sec-after",
+        sectionTitle: "After start",
+        type: "YES_NO",
+        options: [],
+        attentionValues: [],
+        required: true,
+        showLastValue: false,
+        applicableEquipmentRefs: [],
+        applicableShifts: [],
+        firstOfWeekOnly: false,
+        sortOrder: 1,
+      },
+    ],
+  };
+  const grouped = groupQuestionsBySection(
+    managedDefinition.questions,
+    managedDefinition.sections,
+  );
+  assert.equal(grouped.length, 2);
+  assert.equal(grouped[0].requiresSignature, true);
+  assert.equal(grouped[1].requiresSignature, false);
+  assert.deepEqual(
+    sectionSignatureKeysForDefinition(
+      managedDefinition,
+      managedDefinition.questions,
+    ),
+    ["sec-before"],
+  );
+  const answers = buildAnswersFromResponses(
+    managedDefinition,
+    { q1: "Yes", q2: "Yes" },
+  );
+  assert.equal(answers[0].sectionId, "sec-before");
+  assert.equal(answers[1].sectionId, "sec-after");
 }
 
 console.log("inspections tests passed");

@@ -78,14 +78,23 @@ export function isSyntheticPermitDurationQuestion(questionId: string): boolean {
 
 export function groupAnswersForDocument(
   rows: InspectionAnswerRecord[],
-): Array<{ title: string; fields: RecordDocumentField[] }> {
-  const groups: Array<{ title: string; fields: RecordDocumentField[] }> = [];
+): Array<{
+  title: string;
+  sectionId: string | null;
+  fields: RecordDocumentField[];
+}> {
+  const groups: Array<{
+    title: string;
+    sectionId: string | null;
+    fields: RecordDocumentField[];
+  }> = [];
 
   for (const row of rows) {
     if (isSyntheticPermitDurationQuestion(row.questionId)) {
       continue;
     }
     const title = row.sectionTitle?.trim() || "Answers";
+    const sectionId = row.sectionId?.trim() || null;
     const label = row.label.trim();
     const sectionTitle = title.trim();
     const field: RecordDocumentField = {
@@ -94,11 +103,15 @@ export function groupAnswersForDocument(
       value: formatAnswerForDocument(row),
       flagged: row.flagged,
     };
-    const existing = groups.find((group) => group.title === title);
+    const existing = groups.find(
+      (group) =>
+        group.title === title &&
+        (group.sectionId ?? null) === (sectionId ?? null),
+    );
     if (existing) {
       existing.fields.push(field);
     } else {
-      groups.push({ title, fields: [field] });
+      groups.push({ title, sectionId, fields: [field] });
     }
   }
 

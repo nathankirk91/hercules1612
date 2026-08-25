@@ -222,6 +222,32 @@ async function ensureInspectionSchemaOnce(): Promise<void> {
          )`,
     `CREATE INDEX IF NOT EXISTS "inspection_questions_inspection_id_is_active_sort_order_idx"
       ON "inspection_questions"("inspection_id", "is_active", "sort_order")`,
+    `CREATE TABLE IF NOT EXISTS "inspection_sections" (
+      "id" TEXT NOT NULL,
+      "inspection_id" TEXT NOT NULL,
+      "title" TEXT NOT NULL,
+      "requires_signature" BOOLEAN NOT NULL DEFAULT true,
+      "sort_order" INTEGER NOT NULL DEFAULT 0,
+      "is_active" BOOLEAN NOT NULL DEFAULT true,
+      "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "inspection_sections_pkey" PRIMARY KEY ("id")
+    )`,
+    `ALTER TABLE "inspection_questions" ADD COLUMN IF NOT EXISTS "section_id" TEXT`,
+    `CREATE INDEX IF NOT EXISTS "inspection_sections_inspection_id_is_active_sort_order_idx"
+      ON "inspection_sections"("inspection_id", "is_active", "sort_order")`,
+    `DO $$ BEGIN
+      ALTER TABLE "inspection_sections"
+        ADD CONSTRAINT "inspection_sections_inspection_id_fkey"
+        FOREIGN KEY ("inspection_id") REFERENCES "inspections"("id")
+        ON DELETE CASCADE ON UPDATE CASCADE;
+    EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
+    `DO $$ BEGIN
+      ALTER TABLE "inspection_questions"
+        ADD CONSTRAINT "inspection_questions_section_id_fkey"
+        FOREIGN KEY ("section_id") REFERENCES "inspection_sections"("id")
+        ON DELETE SET NULL ON UPDATE CASCADE;
+    EXCEPTION WHEN duplicate_object THEN NULL; END $$`,
     `DO $$ BEGIN
       ALTER TABLE "inspection_questions"
         ADD CONSTRAINT "inspection_questions_inspection_id_fkey"
@@ -498,8 +524,96 @@ async function ensureInspectionSchemaOnce(): Promise<void> {
     await prisma.$executeRawUnsafe(statement);
   }
 
+  await backfillInspectionSectionsFromQuestions(prisma);
+
   const { ensureRolesAndSignOffDefaults } = await import("~/lib/roles.server");
   await ensureRolesAndSignOffDefaults();
+}
+
+async function backfillInspectionSectionsFromQuestions(
+  prisma: NonNullable<ReturnType<typeof getPrisma>>,
+): Promise<void> {
+  const questions = await prisma.inspectionQuestion.findMany({
+    where: {
+      isActive: true,
+      sectionId: null,
+      sectionTitle: { not: null },
+      NOT: { sectionTitle: "" },
+    },
+    select: {
+      id: true,
+      inspectionId: true,
+      sectionTitle: true,
+      sortOrder: true,
+    },
+    orderBy: [{ inspectionId: "asc" }, { sortOrder: "asc" }],
+  });
+
+  const titlesByInspection = new Map<
+    string,
+    Array<{ title: string; firstSortOrder: number }>
+  >();
+
+  for (const question of questions) {
+    const title = question.sectionTitle?.trim();
+    if (!title) {
+      continue;
+    }
+    const rows = titlesByInspection.get(question.inspectionId) ?? [];
+    if (!rows.some((row) => row.title === title)) {
+      rows.push({ title, firstSortOrder: question.sortOrder });
+    }
+    titlesByInspection.set(question.inspectionId, rows);
+  }
+
+  for (const [inspectionId, titles] of titlesByInspection) {
+    const existing = await prisma.inspectionSection.findMany({
+      where: { inspectionId, isActive: true },
+      select: { id: true, title: true },
+    });
+    const existingByTitle = new Map(existing.map((row) => [row.title, row.id]));
+    const usedTitles = new Set<string>();
+
+    titles.sort((left, right) => left.firstSortOrder - right.firstSortOrder);
+
+    for (const [index, row] of titles.entries()) {
+      usedTitles.add(row.title);
+      let sectionId = existingByTitle.get(row.title);
+      if (!sectionId) {
+        const created = await prisma.inspectionSection.create({
+          data: {
+            inspectionId,
+            title: row.title,
+            requiresSignature: true,
+            sortOrder: index,
+            isActive: true,
+          },
+          select: { id: true },
+        });
+        sectionId = created.id;
+      }
+
+      await prisma.inspectionQuestion.updateMany({
+        where: {
+          inspectionId,
+          isActive: true,
+          sectionTitle: row.title,
+          sectionId: null,
+        },
+        data: { sectionId },
+      });
+    }
+
+    for (const section of existing) {
+      if (!usedTitles.has(section.title)) {
+        continue;
+      }
+      await prisma.inspectionSection.update({
+        where: { id: section.id },
+        data: { sortOrder: titles.findIndex((row) => row.title === section.title) },
+      });
+    }
+  }
 }
 
 /** Apply pending Prisma SQL through the app DATABASE_URL (idempotent). */
@@ -574,6 +688,7 @@ export async function applyPendingMigrations(): Promise<AppliedMigration[]> {
       name.includes("_inspection_actions") ||
       name.includes("_inspection_run_signature") ||
       name.includes("_inspection_run_section_signatures") ||
+      name.includes("_inspection_sections") ||
       name.includes("_hsolenis_operator_users") ||
       name.includes("_remove_permit_signoff_roles") ||
       name.includes("_rename_access_levels")
