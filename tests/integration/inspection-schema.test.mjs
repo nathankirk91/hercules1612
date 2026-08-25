@@ -10,18 +10,26 @@ const {
   filterQuestionsForContext,
   filterQuestionsForEquipment,
   readShiftAnswer,
+  sectionSignatureKey,
+  sectionSignatureKeysForQuestions,
 } = await import("../../app/lib/inspections.ts");
 const { createInspectionSchema } = await import(
   "../../app/lib/inspection.schema.ts"
 );
 
-function basePayload(responses) {
+function sectionSignaturesFor(questions, value = "JD") {
+  return Object.fromEntries(
+    sectionSignatureKeysForQuestions(questions).map((key) => [key, value]),
+  );
+}
+
+function basePayload(responses, questions = []) {
   return {
     operatorId: "op-1",
     equipmentRef: "H57168",
     notes: "",
     actions: [],
-    signature: "JD",
+    sectionSignatures: sectionSignaturesFor(questions),
     responses,
   };
 }
@@ -92,12 +100,14 @@ const unitQuestions = filterQuestionsForEquipment(
   // Intentionally omit the weekly question answer.
   delete responses[weekly.id];
 
-  const parsed = schema.safeParse(basePayload(responses));
+  const parsed = schema.safeParse(basePayload(responses, applicable));
   assert.equal(parsed.success, true);
   assert.equal(parsed.data.responses[weekly.id], undefined);
   assert.ok(
     !parsed.data.answers.some((answer) => answer.questionId === weekly.id),
   );
+  assert.ok(parsed.data.sectionSignatures["After start"]);
+  assert.equal(parsed.data.signature, "JD");
 }
 
 {
@@ -118,7 +128,7 @@ const unitQuestions = filterQuestionsForEquipment(
   );
   delete responses[weekly.id];
 
-  const parsed = schema.safeParse(basePayload(responses));
+  const parsed = schema.safeParse(basePayload(responses, applicable));
   assert.equal(parsed.success, false);
   const issue = parsed.error.issues.find(
     (row) =>
@@ -142,7 +152,7 @@ const unitQuestions = filterQuestionsForEquipment(
   const responses = fillRequired(applicable, {
     "forklift-daily-check__shift": "Day",
   });
-  const parsed = schema.safeParse(basePayload(responses));
+  const parsed = schema.safeParse(basePayload(responses, applicable));
   assert.equal(parsed.success, true);
   assert.equal(
     readShiftAnswer(unitQuestions, parsed.data.responses),
@@ -172,11 +182,54 @@ const unitQuestions = filterQuestionsForEquipment(
     "forklift-daily-check__shift": "Day",
   });
   const parsed = schema.safeParse({
-    ...basePayload(responses),
+    ...basePayload(responses, applicable),
     equipmentRef: "H57168",
   });
   assert.equal(parsed.success, true);
   assert.equal(parsed.data.equipmentRef, "H20287");
+}
+
+{
+  // Missing a section signature fails validation.
+  const schema = createInspectionSchema(
+    { ...template, questions: unitQuestions },
+    { isFirstInspectionOfWeek: false },
+  );
+  const applicable = filterQuestionsForContext(unitQuestions, {
+    shift: "Afternoon",
+    isFirstInspectionOfWeek: false,
+  });
+  const responses = fillRequired(applicable, {
+    "forklift-daily-check__shift": "Afternoon",
+  });
+  const signatures = sectionSignaturesFor(applicable);
+  delete signatures["Before start"];
+  const parsed = schema.safeParse({
+    ...basePayload(responses, applicable),
+    sectionSignatures: signatures,
+  });
+  assert.equal(parsed.success, false);
+  const issue = parsed.error.issues.find(
+    (row) =>
+      Array.isArray(row.path) &&
+      row.path[0] === "sectionSignatures" &&
+      row.path[1] === "Before start",
+  );
+  assert.ok(issue, "expected required error on Before start signature");
+}
+
+{
+  assert.equal(sectionSignatureKey(null), "__default__");
+  assert.equal(sectionSignatureKey("  After start  "), "After start");
+  assert.deepEqual(
+    sectionSignatureKeysForQuestions([
+      { sectionTitle: "A" },
+      { sectionTitle: "A" },
+      { sectionTitle: "B" },
+      { sectionTitle: null },
+    ]),
+    ["A", "B", "__default__"],
+  );
 }
 
 console.log("inspection-schema integration tests passed");

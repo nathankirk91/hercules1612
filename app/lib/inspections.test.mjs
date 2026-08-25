@@ -3,6 +3,10 @@ import assert from "node:assert/strict";
 const {
   FORKLIFT_DAILY_CHECK,
   buildAnswersFromResponses,
+  groupQuestionsBySection,
+  sectionSignatureKey,
+  sectionSignatureKeysForQuestions,
+  sectionSignatureLabel,
   summarizeInspectionAnswers,
 } = await import("./inspections.ts");
 
@@ -423,6 +427,18 @@ function passResponses(definition) {
   const permitSummary = summarizeInspectionAnswers(permitAnswers);
   assert.equal(permitSummary.status, "PASSED");
   assert.ok(permitSummary.answeredCount > 0);
+}
+
+{
+  assert.equal(sectionSignatureKey(undefined), "__default__");
+  assert.equal(sectionSignatureLabel("__default__"), "Section");
+  assert.equal(sectionSignatureLabel("After start"), "After start");
+  const sections = groupQuestionsBySection(FORKLIFT_DAILY_CHECK.questions);
+  assert.ok(sections.length >= 2);
+  assert.deepEqual(
+    sectionSignatureKeysForQuestions(FORKLIFT_DAILY_CHECK.questions),
+    sections.map((section) => sectionSignatureKey(section.title)),
+  );
 }
 
 console.log("inspections tests passed");

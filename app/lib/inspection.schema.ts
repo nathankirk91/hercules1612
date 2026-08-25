@@ -5,6 +5,8 @@ import {
   filterQuestionsForContext,
   parseCheckboxAnswer,
   readShiftAnswer,
+  sectionSignatureKeysForQuestions,
+  sectionSignatureLabel,
   summarizeInspectionAnswers,
   type InspectionDefinition,
 } from "~/lib/inspections";
@@ -30,6 +32,8 @@ export function createInspectionFormSchema(
   context: InspectionSchemaContext = {},
 ) {
   const responseShape: Record<string, z.ZodType<string | undefined>> = {};
+  const sectionSignatureShape: Record<string, z.ZodType<string | undefined>> =
+    {};
   const isFirstInspectionOfWeek = context.isFirstInspectionOfWeek ?? true;
 
   for (const question of definition.questions) {
@@ -104,6 +108,13 @@ export function createInspectionFormSchema(
     }
   }
 
+  for (const key of sectionSignatureKeysForQuestions(definition.questions)) {
+    sectionSignatureShape[key] = z.preprocess(
+      emptyToUndefined,
+      z.string().min(1, "Please sign or initial this section.").optional(),
+    );
+  }
+
   return z
     .object({
       operatorId: z
@@ -129,9 +140,7 @@ export function createInspectionFormSchema(
       actions: z
         .array(z.string().trim().max(2000, "Keep each action under 2000 characters."))
         .default([]),
-      signature: z
-        .string({ error: "Signature is required." })
-        .min(1, "Please sign or initial the form."),
+      sectionSignatures: z.object(sectionSignatureShape).default({}),
       responses: z.object(responseShape),
     })
     .superRefine((value, ctx) => {
@@ -197,6 +206,17 @@ export function createInspectionFormSchema(
           }
         }
       }
+
+      for (const key of sectionSignatureKeysForQuestions(applicableQuestions)) {
+        const signature = value.sectionSignatures?.[key];
+        if (signature == null || String(signature).trim() === "") {
+          ctx.addIssue({
+            code: "custom",
+            message: `Please sign or initial ${sectionSignatureLabel(key)}.`,
+            path: ["sectionSignatures", key],
+          });
+        }
+      }
     });
 }
 
@@ -223,12 +243,24 @@ export function createInspectionSchema(
     );
     const summary = summarizeInspectionAnswers(answers);
 
+    const applicableKeys = sectionSignatureKeysForQuestions(applicableQuestions);
+    const sectionSignatures: Record<string, string> = {};
+    for (const key of applicableKeys) {
+      sectionSignatures[key] = String(value.sectionSignatures?.[key] ?? "").trim();
+    }
+    const signature =
+      applicableKeys
+        .map((key) => sectionSignatures[key])
+        .filter(Boolean)
+        .at(-1) ?? "";
+
     return {
       operatorId: value.operatorId,
       equipmentRef: definition.fixedEquipmentRef ?? value.equipmentRef ?? null,
       notes: value.notes ?? null,
       actions: value.actions.map((item) => item.trim()).filter(Boolean),
-      signature: value.signature,
+      sectionSignatures,
+      signature,
       responses,
       answers,
       summary,

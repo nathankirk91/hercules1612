@@ -246,6 +246,7 @@ async function ensureInspectionSchemaOnce(): Promise<void> {
     `ALTER TABLE "inspection_runs" DROP CONSTRAINT IF EXISTS "inspection_runs_operator_id_fkey"`,
     `ALTER TABLE "inspection_runs" DROP COLUMN IF EXISTS "operator_id"`,
     `ALTER TABLE "inspection_runs" ADD COLUMN IF NOT EXISTS "signature" TEXT`,
+    `ALTER TABLE "inspection_runs" ADD COLUMN IF NOT EXISTS "section_signatures" JSONB`,
     `CREATE INDEX IF NOT EXISTS "inspection_runs_inspection_id_idx" ON "inspection_runs"("inspection_id")`,
     `CREATE INDEX IF NOT EXISTS "inspection_runs_status_created_at_idx" ON "inspection_runs"("status", "created_at" DESC)`,
     `CREATE INDEX IF NOT EXISTS "inspection_runs_created_at_idx" ON "inspection_runs"("created_at" DESC)`,
@@ -572,6 +573,7 @@ export async function applyPendingMigrations(): Promise<AppliedMigration[]> {
       name.includes("_clear_shift_attention_values") ||
       name.includes("_inspection_actions") ||
       name.includes("_inspection_run_signature") ||
+      name.includes("_inspection_run_section_signatures") ||
       name.includes("_hsolenis_operator_users") ||
       name.includes("_remove_permit_signoff_roles") ||
       name.includes("_rename_access_levels")
