@@ -1,6 +1,11 @@
 import { formatMelbourneDateTime, melbourneDateYmd } from "~/lib/datetime";
 import type { InspectionAnswerRecord } from "~/lib/inspections";
 import {
+  DEFAULT_SECTION_SIGNATURE_KEY,
+  sectionSignatureKey,
+  sectionSignatureLabel,
+} from "~/lib/inspections";
+import {
   buildRecordFilename,
   emptyFieldValue,
   groupAnswersForDocument,
@@ -17,6 +22,7 @@ export type InspectionDocumentInput = {
   createdAt: Date;
   notes: string | null;
   signature: string | null;
+  sectionSignatures?: Record<string, string> | null;
   summary: {
     answeredCount: number;
     attentionCount: number;
@@ -74,6 +80,12 @@ function formatActionLine(
   return lines.join("\n");
 }
 
+function signatureKeyForDocumentGroupTitle(title: string): string {
+  return title === "Answers"
+    ? DEFAULT_SECTION_SIGNATURE_KEY
+    : sectionSignatureKey(title);
+}
+
 export function buildInspectionDocument(
   run: InspectionDocumentInput,
   options: { generatedAt?: Date } = {},
@@ -81,6 +93,8 @@ export function buildInspectionDocument(
   const generatedAt = options.generatedAt ?? new Date();
   const submittedAt = formatMelbourneDateTime(run.createdAt) ?? EMPTY_PLACEHOLDER;
   const status = inspectionStatusLabel(run.status);
+  const sectionSignatures = run.sectionSignatures ?? {};
+  const hasSectionSignatures = Object.keys(sectionSignatures).length > 0;
 
   const blocks: RecordDocument["blocks"] = [];
 
@@ -112,6 +126,23 @@ export function buildInspectionDocument(
       title: group.title,
       fields: group.fields,
     });
+
+    if (hasSectionSignatures) {
+      const key = signatureKeyForDocumentGroupTitle(group.title);
+      const imageDataUrl = sectionSignatures[key] ?? null;
+      blocks.push({
+        kind: "signatures",
+        title: `${sectionSignatureLabel(key)} signature`,
+        signatures: [
+          {
+            label: "Signature / initials",
+            name: run.operatorName?.trim() || undefined,
+            imageDataUrl,
+            unsigned: !String(imageDataUrl ?? "").trim(),
+          },
+        ],
+      });
+    }
   }
 
   if (run.notes?.trim()) {
@@ -122,18 +153,20 @@ export function buildInspectionDocument(
     });
   }
 
-  blocks.push({
-    kind: "signatures",
-    title: "Operator signature",
-    signatures: [
-      {
-        label: "Operator signature",
-        name: run.operatorName?.trim() || undefined,
-        imageDataUrl: run.signature,
-        unsigned: !String(run.signature ?? "").trim(),
-      },
-    ],
-  });
+  if (!hasSectionSignatures) {
+    blocks.push({
+      kind: "signatures",
+      title: "Operator signature",
+      signatures: [
+        {
+          label: "Operator signature",
+          name: run.operatorName?.trim() || undefined,
+          imageDataUrl: run.signature,
+          unsigned: !String(run.signature ?? "").trim(),
+        },
+      ],
+    });
+  }
 
   return {
     kind: "inspection",

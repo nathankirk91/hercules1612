@@ -133,6 +133,11 @@ assert.equal(buildRecordFilename(["", null]), "record.pdf");
       createdAt: generatedAt,
       notes: "Horn is weak.",
       signature: SAMPLE_SIGNATURE,
+      sectionSignatures: {
+        "Shift details": SAMPLE_SIGNATURE,
+        "After start": SAMPLE_SIGNATURE,
+        "Tagged out": SAMPLE_SIGNATURE,
+      },
       summary: {
         answeredCount: 2,
         attentionCount: 1,
@@ -218,11 +223,23 @@ assert.equal(buildRecordFilename(["", null]), "record.pdf");
   );
   assert.equal(notes?.body, "Horn is weak.");
 
-  const signatureBlock = doc.blocks.find(
+  const signatureBlocks = doc.blocks.filter(
     (block) => block.kind === "signatures",
   );
-  assert.equal(signatureBlock?.signatures[0].imageDataUrl, SAMPLE_SIGNATURE);
-  assert.equal(signatureBlock?.signatures[0].unsigned, false);
+  assert.equal(signatureBlocks.length, 3);
+  assert.deepEqual(
+    signatureBlocks.map((block) => block.title),
+    [
+      "Shift details signature",
+      "After start signature",
+      "Tagged out signature",
+    ],
+  );
+  assert.equal(
+    signatureBlocks[0]?.signatures[0].imageDataUrl,
+    SAMPLE_SIGNATURE,
+  );
+  assert.equal(signatureBlocks[0]?.signatures[0].unsigned, false);
 
   const bytes = await renderRecordPdf(doc);
   const text = pdfReadableText(bytes);
@@ -231,6 +248,45 @@ assert.equal(buildRecordFilename(["", null]), "record.pdf");
   assert.match(text, /Horn \/ reverse alarm/);
   assert.match(text, /Alex Operator/);
   assert.match(text, /\/Subtype\s*\/Image/);
+}
+
+{
+  // Legacy runs without sectionSignatures still render a single operator signature.
+  const generatedAt = new Date("2026-08-17T01:00:00.000Z");
+  const doc = buildInspectionDocument(
+    {
+      id: "run-legacy",
+      inspectionTitle: "Legacy check",
+      status: "PASSED",
+      operatorName: "Alex Operator",
+      equipmentRef: null,
+      createdAt: generatedAt,
+      notes: null,
+      signature: SAMPLE_SIGNATURE,
+      answers: [
+        {
+          questionId: "q1",
+          label: "Ready",
+          sectionTitle: "Checks",
+          type: "YES_NO",
+          answer: "Yes",
+          flagged: false,
+        },
+      ],
+      summary: {
+        answeredCount: 1,
+        attentionCount: 0,
+        attentionItems: [],
+      },
+      actions: [],
+    },
+    { generatedAt },
+  );
+  const signatureBlocks = doc.blocks.filter(
+    (block) => block.kind === "signatures",
+  );
+  assert.equal(signatureBlocks.length, 1);
+  assert.equal(signatureBlocks[0]?.title, "Operator signature");
 }
 
 {

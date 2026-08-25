@@ -21,6 +21,8 @@ import { requireUser } from "~/lib/auth.server";
 import { formatMelbourneDateTime } from "~/lib/datetime";
 import {
   formatLastAnswerDisplay,
+  sectionSignatureKey,
+  sectionSignatureLabel,
   type InspectionAnswerRecord,
   type InspectionQuestionType,
 } from "~/lib/inspections";
@@ -265,7 +267,11 @@ export default function InspectionSubmissionPage({
             ) : null}
 
             <div className="grid gap-4">
-              {groupAnswersBySection(run.answers).map((group) => (
+              {groupAnswersBySection(run.answers).map((group) => {
+                const signatureKey = sectionSignatureKey(group.title);
+                const sectionSignature =
+                  run.sectionSignatures?.[signatureKey] ?? null;
+                return (
                 <div
                   key={group.title ?? "general"}
                   className="rounded-lg border border-border/70 bg-background/50 p-4"
@@ -292,8 +298,23 @@ export default function InspectionSubmissionPage({
                       </li>
                     ))}
                   </ul>
+                  {sectionSignature ? (
+                    <div className="mt-4 border-t border-border/60 pt-3">
+                      <p className="text-sm font-medium">
+                        {sectionSignatureLabel(signatureKey)} signature
+                      </p>
+                      <div className="mt-2">
+                        <img
+                          src={sectionSignature}
+                          alt={`${sectionSignatureLabel(signatureKey)} signature`}
+                          className="h-20 w-auto rounded border border-border/50 bg-white object-contain sm:h-28"
+                        />
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
-              ))}
+                );
+              })}
             </div>
 
             {run.notes ? (
@@ -305,7 +326,8 @@ export default function InspectionSubmissionPage({
               </div>
             ) : null}
 
-            {run.signature ? (
+            {!Object.keys(run.sectionSignatures ?? {}).length &&
+            run.signature ? (
               <div className="rounded-lg border border-border/70 bg-background/50 p-4">
                 <p className="text-sm font-medium">Operator signature</p>
                 <div className="mt-2">

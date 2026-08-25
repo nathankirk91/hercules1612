@@ -33,6 +33,8 @@ import {
   groupQuestionsBySection,
   isPermitInspection,
   parseCheckboxAnswer,
+  sectionSignatureKey,
+  sectionSignatureKeysForQuestions,
   serializeCheckboxAnswer,
   type InspectionDefinition,
   type InspectionQuestionType,
@@ -125,13 +127,19 @@ export function InspectionChecklistForm({
       operatorId: "",
       equipmentRef: fixedEquipmentRef || equipmentRef || "",
       notes: "",
-      signature: "",
       actions: [""],
+      sectionSignatures: Object.fromEntries(
+        sectionSignatureKeysForQuestions(definition.questions).map((key) => [
+          key,
+          "",
+        ]),
+      ),
       responses: defaultResponses,
     },
   });
 
   const responseFields = fields.responses.getFieldset();
+  const sectionSignatureFields = fields.sectionSignatures.getFieldset();
   const actionFields = fields.actions.getFieldList();
   const isPermit = isPermitInspection(definition);
   const formNoun = isPermit ? "permit" : "inspection";
@@ -262,7 +270,10 @@ export function InspectionChecklistForm({
               </p>
             ) : null}
 
-            {sections.map((section, sectionIndex) => (
+            {sections.map((section, sectionIndex) => {
+              const signatureKey = sectionSignatureKey(section.title);
+              const signatureField = sectionSignatureFields[signatureKey];
+              return (
               <section
                 key={section.title ?? `section-${sectionIndex}`}
                 className="grid gap-4"
@@ -489,8 +500,25 @@ export function InspectionChecklistForm({
                     );
                   })}
                 </ul>
+                <div className="grid gap-2 rounded-lg border border-border/70 bg-background/40 p-4">
+                  <Label>
+                    {section.title
+                      ? `${section.title} signature / initials`
+                      : "Signature / initials"}
+                  </Label>
+                  <SignaturePad
+                    name={
+                      signatureField?.name ??
+                      `sectionSignatures[${signatureKey}]`
+                    }
+                    id={signatureField?.id ?? `section-signature-${signatureKey}`}
+                    required
+                    error={signatureField?.errors?.join(" ")}
+                  />
+                </div>
               </section>
-            ))}
+              );
+            })}
 
             <section className="grid gap-3">
               <div className="flex flex-wrap items-end justify-between gap-2">
@@ -628,16 +656,6 @@ export function InspectionChecklistForm({
                   {fields.operatorId.errors.join(" ")}
                 </p>
               ) : null}
-            </section>
-
-            <section className="grid gap-2">
-              <Label>Signature / initials</Label>
-              <SignaturePad
-                name={fields.signature.name}
-                id={fields.signature.id}
-                required
-                error={fields.signature.errors?.join(" ")}
-              />
             </section>
 
             {formError ? (

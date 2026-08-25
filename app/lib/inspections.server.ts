@@ -144,6 +144,7 @@ export type InspectionHistoryItem = {
   equipmentRef: string | null;
   notes: string | null;
   signature: string | null;
+  sectionSignatures: Record<string, string>;
   summary: InspectionSummary;
   /** Actions raised on this run (open + closed). */
   actionCount: number;
@@ -1639,6 +1640,7 @@ export async function createInspectionRun(args: {
   equipmentRef: string | null;
   notes: string | null;
   signature?: string | null;
+  sectionSignatures?: Record<string, string> | null;
   answers: InspectionAnswerRecord[];
   summary: InspectionSummary;
 }): Promise<{ id: string } | null> {
@@ -1668,6 +1670,7 @@ export async function createInspectionRun(args: {
       equipmentRef: args.equipmentRef,
       notes: args.notes,
       signature: args.signature ?? null,
+      sectionSignatures: args.sectionSignatures ?? {},
       responses: args.answers,
       summary: args.summary,
       inspectionVersion,
@@ -1730,12 +1733,30 @@ function parseAnswers(value: unknown): InspectionAnswerRecord[] {
         sectionTitle: null,
         type: "RADIO" as const,
         answer,
-        flagged: result === "attention" || answer === "Needs attention" || answer === "No",
+        flagged:
+          result === "attention" ||
+          answer === "Needs attention" ||
+          answer === "No",
       };
     });
   }
 
   return [];
+}
+
+function parseSectionSignatures(value: unknown): Record<string, string> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {};
+  }
+  const out: Record<string, string> = {};
+  for (const [key, signature] of Object.entries(value)) {
+    const trimmed = String(signature ?? "").trim();
+    if (!trimmed) {
+      continue;
+    }
+    out[String(key)] = trimmed;
+  }
+  return out;
 }
 
 export async function listInspectionHistory(
@@ -1803,6 +1824,7 @@ export async function listInspectionHistory(
       equipmentRef: row.equipmentRef,
       notes: row.notes,
       signature: null,
+      sectionSignatures: {},
       summary,
       actionCount: row._count.actions,
       // Full answers are loaded on the submission detail page only.
@@ -2141,6 +2163,7 @@ export async function getInspectionRunById(
     equipmentRef: row.equipmentRef,
     notes: row.notes,
     signature: row.signature ?? null,
+    sectionSignatures: parseSectionSignatures(row.sectionSignatures),
     summary: parseSummary(row.summary),
     actionCount: actionRows.length,
     answers,

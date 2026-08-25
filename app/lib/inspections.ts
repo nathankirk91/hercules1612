@@ -1751,6 +1751,39 @@ export function groupQuestionsBySection(
   return groups;
 }
 
+/** Form/storage key for a section signature when the section has no title. */
+export const DEFAULT_SECTION_SIGNATURE_KEY = "__default__";
+
+/** Stable key for per-section inspection signatures. */
+export function sectionSignatureKey(
+  sectionTitle: string | null | undefined,
+): string {
+  const trimmed = sectionTitle?.trim() || "";
+  return trimmed || DEFAULT_SECTION_SIGNATURE_KEY;
+}
+
+/** Human label for a section signature key. */
+export function sectionSignatureLabel(sectionKey: string): string {
+  return sectionKey === DEFAULT_SECTION_SIGNATURE_KEY ? "Section" : sectionKey;
+}
+
+/** Keys for every distinct section in a question list (definition or filtered). */
+export function sectionSignatureKeysForQuestions(
+  questions: Array<Pick<InspectionQuestionDef, "sectionTitle">>,
+): string[] {
+  const keys: string[] = [];
+  const seen = new Set<string>();
+  for (const question of questions) {
+    const key = sectionSignatureKey(question.sectionTitle);
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    keys.push(key);
+  }
+  return keys;
+}
+
 export function parseStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) {
     return [];

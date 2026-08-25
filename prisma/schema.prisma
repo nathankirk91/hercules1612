@@ -280,6 +280,8 @@ model InspectionRun {
   summary            Json
   notes              String?
   signature          String?
+  /// Per-section operator signatures keyed by section title (or __default__).
+  sectionSignatures  Json?                @map("section_signatures")
   createdAt          DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
   actions            InspectionAction[]   @relation("ActionsCreatedOnRun")
 
