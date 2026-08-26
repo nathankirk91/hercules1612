@@ -1491,6 +1491,18 @@ export function defaultAttentionValues(
   return [];
 }
 
+/** Map DB JSON to attention flags; null/missing keeps legacy YES_NO default only. */
+export function resolveStoredAttentionValues(
+  type: InspectionQuestionType,
+  stored: unknown,
+  options: string[],
+): string[] {
+  if (stored == null) {
+    return type === "YES_NO" ? defaultAttentionValues(type, options) : [];
+  }
+  return parseStringArray(stored);
+}
+
 export function questionTypeLabel(type: InspectionQuestionType): string {
   switch (type) {
     case "YES_NO":

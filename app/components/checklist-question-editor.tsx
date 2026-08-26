@@ -211,7 +211,7 @@ export function ChecklistQuestionFields({
                       name="attentionValues"
                       value={option}
                       defaultChecked={
-                        defaults?.attentionValues
+                        Array.isArray(defaults?.attentionValues)
                           ? defaults.attentionValues.includes(option)
                           : questionType === "YES_NO"
                             ? option === "No"
