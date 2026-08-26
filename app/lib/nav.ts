@@ -178,6 +178,11 @@ export function buildNavItems({
               label: "Manage",
               description: "Edit inspection templates",
             },
+            {
+              to: "/inspections/categories",
+              label: "Categories",
+              description: "Define inspection categories",
+            },
           ]
         : []),
     ],

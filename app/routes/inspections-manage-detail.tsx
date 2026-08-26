@@ -28,10 +28,12 @@ import {
   parseChecklistQuestionFormData,
   questionTypeLabel,
   type InspectionQuestionType,
+  type InspectionSectionDef,
 } from "~/lib/inspections";
 import {
   addInspectionQuestion,
   addInspectionSection,
+  createManagedInspection,
   getManagedInspection,
   moveInspectionQuestion,
   moveInspectionSection,
@@ -44,8 +46,9 @@ import {
   type InspectionVersionHistoryItem,
 } from "~/lib/inspections.server";
 import {
-  type InspectionSectionDef,
-} from "~/lib/inspections";
+  ensureInspectionCategories,
+  listInspectionCategories,
+} from "~/lib/inspection-categories.server";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -66,8 +69,12 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   if (isPermitInspection(inspection)) {
     throw redirect(`/permits/manage/${inspection.id}`);
   }
-  const pendingCount = await countPendingRuns();
-  return { user, inspection, pendingCount };
+  await ensureInspectionCategories();
+  const [categories, pendingCount] = await Promise.all([
+    listInspectionCategories(),
+    countPendingRuns(),
+  ]);
+  return { user, inspection, categories, pendingCount };
 }
 
 export async function action({ request, params }: Route.ActionArgs) {
@@ -107,8 +114,34 @@ export async function action({ request, params }: Route.ActionArgs) {
         equipmentLabel: String(formData.get("equipmentLabel") ?? ""),
         isAvailable: String(formData.get("isAvailable") ?? "") === "on",
         requiredSignerCount: null,
+        isMasterTemplate:
+          existing.inheritsQuestions
+            ? false
+            : String(formData.get("isMasterTemplate") ?? "") === "on",
       });
       return { ok: true as const, message: "Details saved." };
+    }
+
+    if (intent === "add-derived") {
+      if (existing.inheritsQuestions) {
+        return data(
+          {
+            error:
+              "Derived forms are added from the master template, not from another derived form.",
+          },
+          { status: 400 },
+        );
+      }
+      const created = await createManagedInspection({
+        title: String(formData.get("title") ?? ""),
+        description: String(formData.get("description") ?? ""),
+        category: existing.category,
+        equipmentLabel: existing.equipmentLabel ?? "",
+        templateInspectionId: inspectionId,
+        fixedEquipmentRef: String(formData.get("fixedEquipmentRef") ?? ""),
+        isAvailable: true,
+      });
+      throw redirect(`/inspections/manage/${created.id}`);
     }
 
     if (intent === "publish-version") {
@@ -464,7 +497,7 @@ export default function InspectionsManageDetailPage({
   loaderData,
   actionData,
 }: Route.ComponentProps) {
-  const { user, inspection, pendingCount } = loaderData;
+  const { user, inspection, categories, pendingCount } = loaderData;
   const [questionType, setQuestionType] =
     useState<InspectionQuestionType>("YES_NO");
   const [radioOptions, setRadioOptions] = useState("OK\nNeeds attention\nN/A");
@@ -487,13 +520,16 @@ export default function InspectionsManageDetailPage({
             {inspection.hasUnpublishedChanges ? (
               <Badge variant="outline">Unpublished changes</Badge>
             ) : null}
-            {inspection.unitFormCount > 0 ? (
+            {inspection.isMasterTemplate || inspection.unitFormCount > 0 ? (
               <Badge variant="outline">
-                Master template · {inspection.unitFormCount} unit forms
+                Master template
+                {inspection.unitFormCount > 0
+                  ? ` · ${inspection.unitFormCount} derived`
+                  : ""}
               </Badge>
             ) : null}
             {inspection.inheritsQuestions ? (
-              <Badge variant="outline">Shared questions</Badge>
+              <Badge variant="outline">Derived · shared questions</Badge>
             ) : null}
             {inspection.fixedEquipmentRef ? (
               <Badge variant="outline">
@@ -513,9 +549,9 @@ export default function InspectionsManageDetailPage({
           <p className="mt-2 max-w-2xl text-muted-foreground">
             {inspection.inheritsQuestions ? (
               <>
-                This unit form inherits its checklist from the master template.
-                Change questions once on the template and every unit form updates.
-                Operators fill this out on{" "}
+                This form inherits its checklist from the master template.
+                Change questions once on the template and every derived form
+                updates. Operators fill this out on{" "}
                 <Link
                   to={inspection.href}
                   className="underline-offset-4 hover:underline"
@@ -524,16 +560,18 @@ export default function InspectionsManageDetailPage({
                 </Link>
                 .
               </>
-            ) : inspection.unitFormCount > 0 ? (
+            ) : inspection.isMasterTemplate || inspection.unitFormCount > 0 ? (
               <>
-                This is the master forklift checklist. Question edits here apply
-                to all {inspection.unitFormCount} unit forms. Publish one
-                revision when your batch of edits is done. The template itself
-                is hidden from operators.
+                This is a master template. Question edits here apply to all{" "}
+                {inspection.unitFormCount} derived form
+                {inspection.unitFormCount === 1 ? "" : "s"}. Publish one
+                revision when your batch of edits is done. Masters stay hidden
+                from operators unless you show them.
               </>
             ) : (
               <>
-                Update details and edit questions freely. When you are done,
+                Update details and edit questions freely. Mark it as a master
+                template to derive other inspections from it. When you are done,
                 publish one form revision with a single comment. Operators fill
                 these out on{" "}
                 <Link
@@ -586,11 +624,36 @@ export default function InspectionsManageDetailPage({
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="grid gap-2">
                     <Label htmlFor="category">Category</Label>
-                    <Input
+                    <select
                       id="category"
                       name="category"
+                      required
+                      className="flex h-9 w-full rounded-lg border border-input bg-transparent px-3 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                       defaultValue={inspection.category}
-                    />
+                    >
+                      {!categories.some(
+                        (category) => category.name === inspection.category,
+                      ) ? (
+                        <option value={inspection.category}>
+                          {inspection.category}
+                        </option>
+                      ) : null}
+                      {categories.map((category) => (
+                        <option key={category.id} value={category.name}>
+                          {category.name}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-muted-foreground">
+                      Manage categories under{" "}
+                      <Link
+                        to="/inspections/categories"
+                        className="underline-offset-4 hover:underline"
+                      >
+                        Inspections → Categories
+                      </Link>
+                      .
+                    </p>
                   </div>
                   <div className="grid gap-2">
                     <Label htmlFor="equipmentLabel">Equipment ID label</Label>
@@ -602,6 +665,23 @@ export default function InspectionsManageDetailPage({
                     />
                   </div>
                 </div>
+                {!inspection.inheritsQuestions ? (
+                  <label className="flex items-start gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      name="isMasterTemplate"
+                      defaultChecked={inspection.isMasterTemplate}
+                      className="mt-0.5 size-4 accent-[var(--brand-navy)]"
+                    />
+                    <span>
+                      Master template
+                      <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
+                        Other inspections can inherit this checklist. Turn off
+                        only after removing derived forms.
+                      </span>
+                    </span>
+                  </label>
+                ) : null}
                 <label className="flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"
@@ -617,6 +697,96 @@ export default function InspectionsManageDetailPage({
               </Form>
             </CardContent>
           </Card>
+
+          {!inspection.inheritsQuestions ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  Derived inspections ({inspection.derivedForms.length})
+                </CardTitle>
+                <CardDescription>
+                  Forms that inherit this checklist. Add a unit ID when the
+                  derived form is locked to one piece of equipment.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="grid gap-4">
+                <Form method="post" className="grid gap-4 rounded-lg border border-border/70 bg-background/50 p-4">
+                  <input type="hidden" name="intent" value="add-derived" />
+                  <p className="text-sm font-medium text-brand-navy">
+                    Add derived inspection
+                  </p>
+                  <div className="grid gap-2">
+                    <Label htmlFor="derived-title">Title</Label>
+                    <Input
+                      id="derived-title"
+                      name="title"
+                      required
+                      placeholder="e.g. Forklift H57168 daily check"
+                      autoComplete="off"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="derived-description">
+                      Description (optional)
+                    </Label>
+                    <Textarea
+                      id="derived-description"
+                      name="description"
+                      rows={2}
+                      placeholder="Shown on the catalog when this form is available"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="derived-equipment">
+                      Unit / equipment ID (optional)
+                    </Label>
+                    <Input
+                      id="derived-equipment"
+                      name="fixedEquipmentRef"
+                      placeholder="e.g. H57168"
+                      autoComplete="off"
+                    />
+                  </div>
+                  <div>
+                    <Button type="submit">Add derived form</Button>
+                  </div>
+                </Form>
+
+                {inspection.derivedForms.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No derived forms yet. Add one above, or create one from
+                    Manage inspections with “Derive from master”.
+                  </p>
+                ) : (
+                  <ul className="grid gap-3">
+                    {inspection.derivedForms.map((form) => (
+                      <li
+                        key={form.id}
+                        className="flex flex-col gap-2 rounded-lg border border-border/70 px-3 py-3 sm:flex-row sm:items-center sm:justify-between"
+                      >
+                        <div>
+                          <p className="font-medium text-brand-navy">
+                            {form.title}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {form.fixedEquipmentRef
+                              ? `Unit ${form.fixedEquipmentRef}`
+                              : "No locked unit"}
+                            {form.isAvailable ? "" : " · Hidden"}
+                          </p>
+                        </div>
+                        <Button asChild variant="outline" size="sm">
+                          <Link to={`/inspections/manage/${form.id}`}>
+                            Open
+                          </Link>
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </CardContent>
+            </Card>
+          ) : null}
 
           {!inspection.inheritsQuestions ? (
             <Card>

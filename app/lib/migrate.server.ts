@@ -141,7 +141,27 @@ async function ensureInspectionSchemaOnce(): Promise<void> {
     `ALTER TABLE "inspections" ADD COLUMN IF NOT EXISTS "required_signer_count" INTEGER`,
     `ALTER TABLE "inspections" ADD COLUMN IF NOT EXISTS "template_inspection_id" TEXT`,
     `ALTER TABLE "inspections" ADD COLUMN IF NOT EXISTS "fixed_equipment_ref" TEXT`,
+    `ALTER TABLE "inspections" ADD COLUMN IF NOT EXISTS "is_master_template" BOOLEAN NOT NULL DEFAULT false`,
     `ALTER TABLE "inspections" ADD COLUMN IF NOT EXISTS "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP`,
+    `CREATE TABLE IF NOT EXISTS "inspection_categories" (
+      "id" TEXT NOT NULL,
+      "name" TEXT NOT NULL,
+      "sort_order" INTEGER NOT NULL DEFAULT 0,
+      "is_active" BOOLEAN NOT NULL DEFAULT true,
+      "created_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updated_at" TIMESTAMPTZ(6) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "inspection_categories_pkey" PRIMARY KEY ("id")
+    )`,
+    `CREATE UNIQUE INDEX IF NOT EXISTS "inspection_categories_name_key" ON "inspection_categories"("name")`,
+    `CREATE INDEX IF NOT EXISTS "inspection_categories_is_active_sort_order_idx"
+      ON "inspection_categories"("is_active", "sort_order")`,
+    `UPDATE "inspections" AS parent
+       SET "is_master_template" = true
+       WHERE parent."template_inspection_id" IS NULL
+         AND EXISTS (
+           SELECT 1 FROM "inspections" AS child
+           WHERE child."template_inspection_id" = parent."id"
+         )`,
     `ALTER TABLE "inspections" ADD COLUMN IF NOT EXISTS "version" INTEGER NOT NULL DEFAULT 1`,
     `UPDATE "inspections"
        SET "required_signer_count" = 2
@@ -526,6 +546,11 @@ async function ensureInspectionSchemaOnce(): Promise<void> {
 
   await backfillInspectionSectionsFromQuestions(prisma);
 
+  const { ensureInspectionCategories } = await import(
+    "~/lib/inspection-categories.server"
+  );
+  await ensureInspectionCategories();
+
   const { ensureRolesAndSignOffDefaults } = await import("~/lib/roles.server");
   await ensureRolesAndSignOffDefaults();
 }
@@ -689,6 +714,7 @@ export async function applyPendingMigrations(): Promise<AppliedMigration[]> {
       name.includes("_inspection_run_signature") ||
       name.includes("_inspection_run_section_signatures") ||
       name.includes("_inspection_sections") ||
+      name.includes("_inspection_categories_and_masters") ||
       name.includes("_hsolenis_operator_users") ||
       name.includes("_remove_permit_signoff_roles") ||
       name.includes("_rename_access_levels")

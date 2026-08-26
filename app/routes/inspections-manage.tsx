@@ -19,6 +19,10 @@ import { Textarea } from "~/components/ui/textarea";
 import { countPendingRuns } from "~/lib/approvals.server";
 import { requireOperatorManager } from "~/lib/auth.server";
 import {
+  ensureInspectionCategories,
+  listInspectionCategories,
+} from "~/lib/inspection-categories.server";
+import {
   createManagedInspection,
   listManagedInspections,
   seedDefaultInspections,
@@ -73,12 +77,24 @@ export async function loader({ request }: Route.LoaderArgs) {
     }
   }
 
-  const pendingCount = await countPendingRuns();
+  await ensureInspectionCategories();
+  const [categories, pendingCount] = await Promise.all([
+    listInspectionCategories(),
+    countPendingRuns(),
+  ]);
+
+  const plantInspections = inspections.filter(
+    (inspection) => !isPermitInspection(inspection),
+  );
+  const deriveSources = plantInspections.filter(
+    (inspection) => !inspection.templateInspectionId,
+  );
+
   return {
     user,
-    inspections: inspections.filter(
-      (inspection) => !isPermitInspection(inspection),
-    ),
+    inspections: plantInspections,
+    deriveSources,
+    categories,
     pendingCount,
     migrateNote,
   };
@@ -107,11 +123,19 @@ export async function action({ request }: Route.ActionArgs) {
           { status: 400 },
         );
       }
+      const isMasterTemplate =
+        String(formData.get("isMasterTemplate") ?? "") === "on";
+      const templateInspectionId =
+        String(formData.get("templateInspectionId") ?? "").trim() || null;
+
       const created = await createManagedInspection({
         title: String(formData.get("title") ?? ""),
         description: String(formData.get("description") ?? ""),
         category,
         equipmentLabel: String(formData.get("equipmentLabel") ?? ""),
+        isMasterTemplate,
+        templateInspectionId,
+        fixedEquipmentRef: String(formData.get("fixedEquipmentRef") ?? ""),
       });
       throw redirect(`/inspections/manage/${created.id}`);
     }
@@ -147,7 +171,14 @@ export default function InspectionsManagePage({
   loaderData,
   actionData,
 }: Route.ComponentProps) {
-  const { user, inspections, pendingCount, migrateNote } = loaderData;
+  const {
+    user,
+    inspections,
+    deriveSources,
+    categories,
+    pendingCount,
+    migrateNote,
+  } = loaderData;
 
   return (
     <div className="app-shell">
@@ -162,13 +193,20 @@ export default function InspectionsManagePage({
             >
               ← Inspections
             </Link>
+            <Link
+              to="/inspections/categories"
+              className="text-sm text-muted-foreground underline-offset-4 hover:underline"
+            >
+              Categories
+            </Link>
           </div>
           <h1 className="font-heading text-3xl font-semibold tracking-tight sm:text-4xl">
             Manage inspections
           </h1>
           <p className="mt-2 max-w-2xl text-muted-foreground">
-            Create equipment and shift checklists, then add questions. Work
-            permits are managed separately under{" "}
+            Create master templates or standalone checklists, then derive unit
+            or variant forms from a master. Work permits are managed separately
+            under{" "}
             <Link
               to="/permits/manage"
               className="underline-offset-4 hover:underline"
@@ -199,7 +237,15 @@ export default function InspectionsManagePage({
             <CardHeader>
               <CardTitle>Add inspection</CardTitle>
               <CardDescription>
-                After creating, add the questions operators should answer.
+                Create a master template to share questions across derived
+                forms, or a standalone checklist. Categories are managed under{" "}
+                <Link
+                  to="/inspections/categories"
+                  className="underline-offset-4 hover:underline"
+                >
+                  Categories
+                </Link>
+                .
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -227,12 +273,23 @@ export default function InspectionsManagePage({
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="grid gap-2">
                     <Label htmlFor="category">Category</Label>
-                    <Input
+                    <select
                       id="category"
                       name="category"
-                      placeholder="e.g. Equipment or Shift"
-                      autoComplete="off"
-                    />
+                      required
+                      className="flex h-9 w-full rounded-lg border border-input bg-transparent px-3 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                      defaultValue={categories[0]?.name ?? "General"}
+                    >
+                      {categories.length === 0 ? (
+                        <option value="General">General</option>
+                      ) : (
+                        categories.map((category) => (
+                          <option key={category.id} value={category.name}>
+                            {category.name}
+                          </option>
+                        ))
+                      )}
+                    </select>
                   </div>
                   <div className="grid gap-2">
                     <Label htmlFor="equipmentLabel">
@@ -245,6 +302,54 @@ export default function InspectionsManagePage({
                       autoComplete="off"
                     />
                   </div>
+                </div>
+                <label className="flex items-start gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    name="isMasterTemplate"
+                    className="mt-0.5 size-4 accent-[var(--brand-navy)]"
+                  />
+                  <span>
+                    Master template
+                    <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
+                      Owns the shared question list. Hidden from operators by
+                      default; create derived forms that inherit its questions.
+                    </span>
+                  </span>
+                </label>
+                <div className="grid gap-2">
+                  <Label htmlFor="templateInspectionId">
+                    Derive from master (optional)
+                  </Label>
+                  <select
+                    id="templateInspectionId"
+                    name="templateInspectionId"
+                    className="flex h-9 w-full rounded-lg border border-input bg-transparent px-3 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                    defaultValue=""
+                  >
+                    <option value="">None — standalone or new master</option>
+                    {deriveSources.map((source) => (
+                      <option key={source.id} value={source.id}>
+                        {source.title}
+                        {source.isMasterTemplate ? " (master)" : ""}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-muted-foreground">
+                    Derived forms inherit questions from the selected checklist.
+                    Leave blank when creating a standalone form or a new master.
+                  </p>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="fixedEquipmentRef">
+                    Unit / equipment ID (optional, for derived forms)
+                  </Label>
+                  <Input
+                    id="fixedEquipmentRef"
+                    name="fixedEquipmentRef"
+                    placeholder="e.g. H57168"
+                    autoComplete="off"
+                  />
                 </div>
                 <div>
                   <Button type="submit">Create inspection</Button>
@@ -287,8 +392,11 @@ export default function InspectionsManagePage({
                           </p>
                           <Badge variant="secondary">{inspection.category}</Badge>
                           <Badge variant="outline">v{inspection.version}</Badge>
-                          {inspection.isQuestionSource ? (
+                          {inspection.isMasterTemplate ? (
                             <Badge variant="outline">Master template</Badge>
+                          ) : null}
+                          {inspection.templateInspectionId ? (
+                            <Badge variant="outline">Derived</Badge>
                           ) : null}
                           {inspection.fixedEquipmentRef ? (
                             <Badge variant="outline">

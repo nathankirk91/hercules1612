@@ -90,11 +90,12 @@ export type ManagedInspection = {
   requiredSignerCount: number | null;
   templateInspectionId: string | null;
   fixedEquipmentRef: string | null;
+  isMasterTemplate: boolean;
   isAvailable: boolean;
   sortOrder: number;
   questionCount: number;
   version: number;
-  /** True when this inspection owns the shared question list for unit forms. */
+  /** True when this inspection owns the shared question list for derived forms. */
   isQuestionSource: boolean;
 };
 
@@ -130,7 +131,16 @@ export type ManagedInspectionDetail = InspectionDefinition & {
   questionSourceId: string | null;
   questionSourceTitle: string | null;
   inheritsQuestions: boolean;
+  isMasterTemplate: boolean;
   unitFormCount: number;
+  /** Derived forms that inherit this master's questions. */
+  derivedForms: Array<{
+    id: string;
+    title: string;
+    fixedEquipmentRef: string | null;
+    isAvailable: boolean;
+    href: string;
+  }>;
   /** Units that can be ticked on master-template questions. */
   unitOptions: Array<{ value: string; label: string }>;
 };
@@ -205,7 +215,7 @@ function isMissingInspectionSchemaError(error: unknown): boolean {
     return true;
   }
   const message = error instanceof Error ? error.message : String(error);
-  return /applicable_shifts|first_of_week_only|applicable_equipment_refs|show_last_value|template_inspection_id|fixed_equipment_ref|section_id|inspection_sections|does not exist|ColumnNotFound/i.test(
+  return /applicable_shifts|first_of_week_only|applicable_equipment_refs|show_last_value|template_inspection_id|fixed_equipment_ref|is_master_template|section_id|inspection_sections|inspection_categories|does not exist|ColumnNotFound/i.test(
     message,
   );
 }
@@ -595,6 +605,9 @@ async function listManagedInspectionsOnce(): Promise<ManagedInspection[]> {
     const questionCount = inheritsQuestions
       ? (row.template?._count.questions ?? 0)
       : row._count.questions;
+    const isMasterTemplate =
+      Boolean(row.isMasterTemplate) ||
+      (!inheritsQuestions && row._count.unitForms > 0);
 
     return {
       id: row.id,
@@ -607,11 +620,12 @@ async function listManagedInspectionsOnce(): Promise<ManagedInspection[]> {
       requiredSignerCount: row.requiredSignerCount ?? null,
       templateInspectionId: row.templateInspectionId,
       fixedEquipmentRef: row.fixedEquipmentRef,
+      isMasterTemplate,
       isAvailable: row.isAvailable,
       sortOrder: row.sortOrder,
       questionCount,
       version: row.version ?? 1,
-      isQuestionSource: !inheritsQuestions && row._count.unitForms > 0,
+      isQuestionSource: isMasterTemplate,
     };
   });
 }
@@ -687,8 +701,11 @@ async function getManagedInspectionOnce(
       unitForms: {
         orderBy: { sortOrder: "asc" },
         select: {
-          fixedEquipmentRef: true,
+          id: true,
           title: true,
+          href: true,
+          fixedEquipmentRef: true,
+          isAvailable: true,
         },
       },
       _count: {
@@ -749,6 +766,15 @@ async function getManagedInspectionOnce(
   }
 
   const unitSource = inheritsQuestions ? row.template?.unitForms : row.unitForms;
+  const derivedForms = (inheritsQuestions ? [] : (row.unitForms ?? [])).map(
+    (unit) => ({
+      id: unit.id,
+      title: unit.title,
+      fixedEquipmentRef: unit.fixedEquipmentRef,
+      isAvailable: unit.isAvailable,
+      href: unit.href,
+    }),
+  );
   const unitOptions = (unitSource ?? [])
     .map((unit) => {
       const value = unit.fixedEquipmentRef?.trim();
@@ -762,6 +788,10 @@ async function getManagedInspectionOnce(
     })
     .filter((unit): unit is { value: string; label: string } => Boolean(unit));
 
+  const isMasterTemplate =
+    Boolean(row.isMasterTemplate) ||
+    (!inheritsQuestions && row._count.unitForms > 0);
+
   return {
     ...definition,
     version: versionNumber,
@@ -772,7 +802,9 @@ async function getManagedInspectionOnce(
       ? (row.template?.title ?? null)
       : row.title,
     inheritsQuestions,
+    isMasterTemplate,
     unitFormCount: row._count.unitForms,
+    derivedForms,
     unitOptions,
   };
 }
@@ -1153,6 +1185,12 @@ export async function seedDefaultInspections(): Promise<number> {
     throw new Error("Database is not configured.");
   }
 
+  const masterIds = new Set(
+    INSPECTION_DEFINITIONS.map((row) => row.templateInspectionId).filter(
+      (id): id is string => Boolean(id),
+    ),
+  );
+
   // Seed templates before unit forms that reference them.
   const ordered = [...INSPECTION_DEFINITIONS].sort((a, b) => {
     const aChild = a.templateInspectionId ? 1 : 0;
@@ -1161,6 +1199,8 @@ export async function seedDefaultInspections(): Promise<number> {
   });
 
   for (const inspection of ordered) {
+    const isMasterTemplate =
+      !inspection.templateInspectionId && masterIds.has(inspection.id);
     await prisma.inspection.upsert({
       where: { id: inspection.id },
       update: {
@@ -1172,6 +1212,7 @@ export async function seedDefaultInspections(): Promise<number> {
         requiredSignerCount: inspection.requiredSignerCount ?? null,
         templateInspectionId: inspection.templateInspectionId ?? null,
         fixedEquipmentRef: inspection.fixedEquipmentRef ?? null,
+        isMasterTemplate,
         isAvailable: inspection.isAvailable,
         sortOrder: inspection.sortOrder,
       },
@@ -1186,6 +1227,7 @@ export async function seedDefaultInspections(): Promise<number> {
         requiredSignerCount: inspection.requiredSignerCount ?? null,
         templateInspectionId: inspection.templateInspectionId ?? null,
         fixedEquipmentRef: inspection.fixedEquipmentRef ?? null,
+        isMasterTemplate,
         isAvailable: inspection.isAvailable,
         sortOrder: inspection.sortOrder,
         version: 1,
@@ -1279,6 +1321,10 @@ export async function createManagedInspection(args: {
   category?: string;
   equipmentLabel?: string;
   requiredSignerCount?: number | null;
+  isMasterTemplate?: boolean;
+  templateInspectionId?: string | null;
+  fixedEquipmentRef?: string | null;
+  isAvailable?: boolean;
 }): Promise<ManagedInspection> {
   const prisma = getPrisma();
   if (!prisma) {
@@ -1290,17 +1336,75 @@ export async function createManagedInspection(args: {
     throw new Error("Title is required.");
   }
 
+  const templateInspectionId = args.templateInspectionId?.trim() || null;
+  const isMasterTemplate = Boolean(args.isMasterTemplate) && !templateInspectionId;
+
+  if (args.isMasterTemplate && templateInspectionId) {
+    throw new Error(
+      "A form cannot be both a master template and derived from another master.",
+    );
+  }
+
+  let template: {
+    id: string;
+    category: string;
+    equipmentLabel: string | null;
+    isMasterTemplate: boolean;
+  } | null = null;
+
+  if (templateInspectionId) {
+    template = await prisma.inspection.findUnique({
+      where: { id: templateInspectionId },
+      select: {
+        id: true,
+        category: true,
+        equipmentLabel: true,
+        isMasterTemplate: true,
+      },
+    });
+    if (!template) {
+      throw new Error("Master template not found.");
+    }
+    if (template.category.toLowerCase() === "permits") {
+      throw new Error("Cannot derive an inspection from a permit form.");
+    }
+    // Promote the source to a master if it was a standalone checklist.
+    if (!template.isMasterTemplate) {
+      await prisma.inspection.update({
+        where: { id: template.id },
+        data: { isMasterTemplate: true },
+      });
+    }
+  }
+
   const baseSlug = slugifyInspectionTitle(title);
   const slug = await uniqueSlug(baseSlug);
   const maxSort = await prisma.inspection.aggregate({
     _max: { sortOrder: true },
   });
 
-  const category = args.category?.trim() || "General";
+  const category =
+    args.category?.trim() ||
+    template?.category?.trim() ||
+    "General";
   const isPermit = category.toLowerCase() === "permits";
+  if (isPermit && (isMasterTemplate || templateInspectionId)) {
+    throw new Error(
+      "Master and derived inspections are for plant checklists, not permits.",
+    );
+  }
   const requiredSignerCount = isPermit
     ? clampRequiredSignerCount(args.requiredSignerCount ?? 2)
     : null;
+
+  const equipmentLabel =
+    args.equipmentLabel?.trim() ||
+    template?.equipmentLabel?.trim() ||
+    null;
+
+  const isAvailable =
+    args.isAvailable ??
+    (isMasterTemplate ? false : true);
 
   const row = await prisma.inspection.create({
     data: {
@@ -1309,15 +1413,20 @@ export async function createManagedInspection(args: {
       description: args.description?.trim() || "",
       category,
       href: isPermit ? `/permits/${slug}` : `/inspections/${slug}`,
-      equipmentLabel: args.equipmentLabel?.trim() || null,
+      equipmentLabel,
       requiredSignerCount,
-      isAvailable: true,
+      templateInspectionId,
+      fixedEquipmentRef: args.fixedEquipmentRef?.trim() || null,
+      isMasterTemplate,
+      isAvailable,
       sortOrder: (maxSort._max.sortOrder ?? 0) + 1,
       version: 1,
     },
   });
 
-  await ensureBaselineInspectionVersion(row.id, "Created inspection");
+  if (!templateInspectionId) {
+    await ensureBaselineInspectionVersion(row.id, "Created inspection");
+  }
 
   return {
     id: row.id,
@@ -1328,13 +1437,14 @@ export async function createManagedInspection(args: {
     href: row.href,
     equipmentLabel: row.equipmentLabel,
     requiredSignerCount: row.requiredSignerCount ?? null,
-    templateInspectionId: null,
-    fixedEquipmentRef: null,
+    templateInspectionId: row.templateInspectionId,
+    fixedEquipmentRef: row.fixedEquipmentRef,
+    isMasterTemplate: row.isMasterTemplate,
     isAvailable: row.isAvailable,
     sortOrder: row.sortOrder,
     questionCount: 0,
     version: row.version ?? 1,
-    isQuestionSource: false,
+    isQuestionSource: row.isMasterTemplate,
   };
 }
 
@@ -1346,6 +1456,7 @@ export async function updateManagedInspection(args: {
   equipmentLabel: string;
   isAvailable: boolean;
   requiredSignerCount?: number | null;
+  isMasterTemplate?: boolean;
 }): Promise<void> {
   const prisma = getPrisma();
   if (!prisma) {
@@ -1359,7 +1470,12 @@ export async function updateManagedInspection(args: {
 
   const existing = await prisma.inspection.findUnique({
     where: { id: args.id },
-    select: { slug: true, category: true },
+    select: {
+      slug: true,
+      category: true,
+      templateInspectionId: true,
+      _count: { select: { unitForms: true } },
+    },
   });
   if (!existing) {
     throw new Error("Inspection not found.");
@@ -1370,6 +1486,20 @@ export async function updateManagedInspection(args: {
   const requiredSignerCount = isPermit
     ? clampRequiredSignerCount(args.requiredSignerCount ?? 2)
     : null;
+
+  if (existing.templateInspectionId && args.isMasterTemplate) {
+    throw new Error(
+      "Derived inspections inherit from a master and cannot become masters themselves.",
+    );
+  }
+  if (
+    args.isMasterTemplate === false &&
+    existing._count.unitForms > 0
+  ) {
+    throw new Error(
+      "Remove derived inspections before turning off master template mode.",
+    );
+  }
 
   await prisma.inspection.update({
     where: { id: args.id },
@@ -1383,6 +1513,9 @@ export async function updateManagedInspection(args: {
       equipmentLabel: args.equipmentLabel.trim() || null,
       requiredSignerCount,
       isAvailable: args.isAvailable,
+      ...(args.isMasterTemplate === undefined
+        ? {}
+        : { isMasterTemplate: args.isMasterTemplate && !isPermit }),
     },
   });
 }
@@ -2645,7 +2778,15 @@ export async function ensureSeededInspectionQuestions(): Promise<void> {
     return aChild - bChild || a.sortOrder - b.sortOrder;
   });
 
+  const masterIds = new Set(
+    INSPECTION_DEFINITIONS.map((row) => row.templateInspectionId).filter(
+      (id): id is string => Boolean(id),
+    ),
+  );
+
   for (const definition of ordered) {
+    const isMasterTemplate =
+      !definition.templateInspectionId && masterIds.has(definition.id);
     await prisma.inspection.upsert({
       where: { id: definition.id },
       update: {
@@ -2657,6 +2798,7 @@ export async function ensureSeededInspectionQuestions(): Promise<void> {
         requiredSignerCount: definition.requiredSignerCount ?? null,
         templateInspectionId: definition.templateInspectionId ?? null,
         fixedEquipmentRef: definition.fixedEquipmentRef ?? null,
+        isMasterTemplate,
         isAvailable: definition.isAvailable,
         sortOrder: definition.sortOrder,
       },
@@ -2671,6 +2813,7 @@ export async function ensureSeededInspectionQuestions(): Promise<void> {
         requiredSignerCount: definition.requiredSignerCount ?? null,
         templateInspectionId: definition.templateInspectionId ?? null,
         fixedEquipmentRef: definition.fixedEquipmentRef ?? null,
+        isMasterTemplate,
         isAvailable: definition.isAvailable,
         sortOrder: definition.sortOrder,
       },

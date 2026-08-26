@@ -188,6 +188,18 @@ model CalculationRun {
   @@map("calculation_runs")
 }
 
+model InspectionCategory {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  sortOrder Int      @default(0) @map("sort_order")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([isActive, sortOrder])
+  @@map("inspection_categories")
+}
+
 model Inspection {
   id                   String   @id @default(cuid())
   slug                 String   @unique
@@ -204,6 +216,8 @@ model Inspection {
   unitForms            Inspection[] @relation("InspectionTemplate")
   /// Locked equipment unit for child forms (e.g. forklift H57168).
   fixedEquipmentRef    String?  @map("fixed_equipment_ref")
+  /// Master checklist that other inspections can inherit questions from.
+  isMasterTemplate     Boolean  @default(false) @map("is_master_template")
   isAvailable          Boolean  @default(true) @map("is_available")
   sortOrder            Int      @default(0) @map("sort_order")
   version              Int      @default(1)

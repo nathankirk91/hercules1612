@@ -81,6 +81,13 @@ assert.deepEqual(
 );
 assert.equal(permits.children[0]?.to, "/permits/dashboard");
 
+const inspections = findNavGroup(managerNav, "inspections");
+assert.ok(inspections);
+assert.deepEqual(
+  inspections.children.map((child) => child.label),
+  ["Checklists", "Records", "Manage", "Categories"],
+);
+
 assert.equal(
   groupIsActive({ pathname: "/approvals", hash: "" }, calculations),
   true,

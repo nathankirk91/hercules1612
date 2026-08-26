@@ -39,6 +39,10 @@ export default [
   route("inspections/history", "routes/inspections-history.tsx"),
   route("inspections/manage", "routes/inspections-manage.tsx"),
   route(
+    "inspections/categories",
+    "routes/inspections-categories.tsx",
+  ),
+  route(
     "inspections/manage/:inspectionId",
     "routes/inspections-manage-detail.tsx",
   ),
