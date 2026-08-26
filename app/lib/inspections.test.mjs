@@ -172,6 +172,32 @@ function passResponses(definition) {
 }
 
 {
+  const { resolveStoredAttentionValues } = await import("./inspections.ts");
+  const yesNoOptions = ["Yes", "No"];
+
+  assert.deepEqual(
+    resolveStoredAttentionValues("YES_NO", null, yesNoOptions),
+    ["No"],
+  );
+  assert.deepEqual(
+    resolveStoredAttentionValues("YES_NO", undefined, yesNoOptions),
+    ["No"],
+  );
+  assert.deepEqual(
+    resolveStoredAttentionValues("YES_NO", [], yesNoOptions),
+    [],
+  );
+  assert.deepEqual(
+    resolveStoredAttentionValues("YES_NO", ["Yes"], yesNoOptions),
+    ["Yes"],
+  );
+  assert.deepEqual(
+    resolveStoredAttentionValues("RADIO", [], ["OK", "Needs attention"]),
+    [],
+  );
+}
+
+{
   const {
     FORKLIFT_DAILY_CHECK_TEMPLATE,
     FORKLIFT_UNIT_FORMS,

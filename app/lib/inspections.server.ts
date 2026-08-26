@@ -13,6 +13,7 @@ import {
   buildAnswersFromResponses,
   buildLastAnswerMap,
   defaultAttentionValues,
+  resolveStoredAttentionValues,
   filterQuestionsForEquipment,
   findShiftQuestion,
   getFallbackInspectionByIdOrSlug,
@@ -260,7 +261,11 @@ function mapQuestion(row: {
     row.type,
     parseStringArray(row.options),
   );
-  const attentionValues = parseStringArray(row.attentionValues);
+  const attentionValues = resolveStoredAttentionValues(
+    row.type,
+    row.attentionValues,
+    options,
+  );
   const permitFieldRole =
     parsePermitFieldRole(row.permitFieldRole) ??
     inferPermitFieldRoleFromId(row.id);
@@ -273,12 +278,7 @@ function mapQuestion(row: {
     sectionTitle: row.sectionTitle,
     type: row.type,
     options,
-    attentionValues:
-      attentionValues.length > 0
-        ? attentionValues
-        : row.type === "YES_NO"
-          ? defaultAttentionValues(row.type, options)
-          : [],
+    attentionValues,
     required: row.required,
     showLastValue: Boolean(row.showLastValue),
     applicableEquipmentRefs: parseStringArray(row.applicableEquipmentRefs),
@@ -896,12 +896,6 @@ function mapVersionHistoryItem(row: {
 function normalizeQuestionsForCompare(questions: InspectionQuestionDef[]) {
   return questions.map((question) => {
     const options = questionOptionsForType(question.type, question.options);
-    const attentionValues =
-      question.attentionValues.length > 0
-        ? question.attentionValues
-        : question.type === "YES_NO"
-          ? defaultAttentionValues(question.type, options)
-          : [];
     return {
       id: question.id,
       label: question.label,
@@ -910,7 +904,7 @@ function normalizeQuestionsForCompare(questions: InspectionQuestionDef[]) {
       sectionTitle: question.sectionTitle ?? null,
       type: question.type,
       options,
-      attentionValues,
+      attentionValues: question.attentionValues,
       required: question.required,
       showLastValue: question.showLastValue,
       applicableEquipmentRefs: [...question.applicableEquipmentRefs].sort(),
