@@ -1,14 +1,21 @@
-import { Link, redirect } from "react-router";
+import { Link, data, redirect } from "react-router";
 
 import type { Route } from "./+types/inspection-page";
 
 import { pageTitle } from "~/lib/brand";
 import { AppHeader } from "~/components/app-header";
 import { InspectionChecklistForm } from "~/components/inspection-checklist-form";
+import { InspectionRecordBoard } from "~/components/inspection-record-board";
 import { Badge } from "~/components/ui/badge";
 import { countPendingRuns } from "~/lib/approvals.server";
 import { requireUser } from "~/lib/auth.server";
+import { melbourneDateYmd } from "~/lib/datetime";
 import { handleInspectionSubmit } from "~/lib/inspection-action.server";
+import {
+  listRecordsForDay,
+  openInspectionRecord,
+} from "~/lib/inspection-record.server";
+import { isSectionedWorkflow } from "~/lib/inspection-workflow";
 import {
   FORKLIFT_INSPECTIONS_HREF,
   isForkliftUnitInspection,
@@ -63,6 +70,34 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const equipmentRef =
     definition.fixedEquipmentRef?.trim() || equipmentParam || null;
 
+  const sectioned = isSectionedWorkflow(definition);
+  if (sectioned) {
+    const recordDate = melbourneDateYmd();
+    const [pendingCount, slots] = await Promise.all([
+      canReviewRuns(user.role) ? countPendingRuns() : Promise.resolve(0),
+      listRecordsForDay({
+        definition,
+        recordDate,
+        equipmentRef,
+      }),
+    ]);
+    return {
+      user,
+      operators: [],
+      pendingCount,
+      definition,
+      selectedShift: shiftParam,
+      equipmentRef,
+      isFirstInspectionOfWeek: false,
+      lastAnswers: {},
+      lastRunAt: null,
+      openActions: [],
+      sectioned: true as const,
+      recordDate,
+      recordSlots: slots,
+    };
+  }
+
   const needsEquipmentPick =
     Boolean(definition.equipmentLabel) && !definition.fixedEquipmentRef;
   const canLoadScopedData = !needsEquipmentPick || Boolean(equipmentRef);
@@ -110,6 +145,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     lastAnswers: lastAnswersResult.answers,
     lastRunAt: lastAnswersResult.createdAt,
     openActions,
+    sectioned: false as const,
+    recordDate: null,
+    recordSlots: [],
   };
 }
 
@@ -123,6 +161,40 @@ export async function action({ request, params }: Route.ActionArgs) {
   }
 
   const user = await requireUser(request, definition.href);
+  const formData = await request.clone().formData();
+  if (String(formData.get("intent") ?? "") === "open-record") {
+    try {
+      const opened = await openInspectionRecord({
+        definition,
+        userId: user.id,
+        equipmentRef:
+          definition.fixedEquipmentRef?.trim() ||
+          String(formData.get("equipmentRef") ?? "").trim() ||
+          null,
+        shift: String(formData.get("shift") ?? "").trim() || null,
+      });
+      throw redirect(
+        `/inspections/${definition.slug}/records/${opened.id}`,
+      );
+    } catch (error) {
+      if (error instanceof Response) {
+        throw error;
+      }
+      return data(
+        {
+          summary: null,
+          runId: null,
+          status: null,
+          lastResult: null,
+          formError:
+            error instanceof Error
+              ? error.message
+              : "Could not open this record.",
+        },
+        { status: 400 },
+      );
+    }
+  }
   return handleInspectionSubmit({ request, user, definition });
 }
 
@@ -141,6 +213,9 @@ export default function InspectionPage({
     lastAnswers,
     lastRunAt,
     openActions,
+    sectioned,
+    recordDate,
+    recordSlots,
   } = loaderData;
   const backToForklifts = isForkliftUnitInspection(definition);
   const isPermit = isPermitInspection(definition);
@@ -178,20 +253,30 @@ export default function InspectionPage({
         </div>
 
         <div className="animate-in fade-in slide-in-from-bottom-3 duration-500 delay-100">
-          <InspectionChecklistForm
-            definition={definition}
-            operators={operators}
-            selectedShift={selectedShift}
-            equipmentRef={equipmentRef}
-            isFirstInspectionOfWeek={isFirstInspectionOfWeek}
-            lastAnswers={lastAnswers}
-            lastRunAt={lastRunAt}
-            openActions={openActions}
-            lastResult={actionData?.lastResult}
-            summary={actionData?.summary}
-            status={actionData?.status}
-            formError={actionData?.formError}
-          />
+          {sectioned ? (
+            <InspectionRecordBoard
+              date={recordDate ?? ""}
+              slots={recordSlots}
+              equipmentRef={equipmentRef}
+              equipmentLabel={definition.equipmentLabel}
+              formError={actionData?.formError}
+            />
+          ) : (
+            <InspectionChecklistForm
+              definition={definition}
+              operators={operators}
+              selectedShift={selectedShift}
+              equipmentRef={equipmentRef}
+              isFirstInspectionOfWeek={isFirstInspectionOfWeek}
+              lastAnswers={lastAnswers}
+              lastRunAt={lastRunAt}
+              openActions={openActions}
+              lastResult={actionData?.lastResult}
+              summary={actionData?.summary}
+              status={actionData?.status}
+              formError={actionData?.formError}
+            />
+          )}
         </div>
       </main>
     </div>

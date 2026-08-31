@@ -147,6 +147,9 @@ export type InspectionSectionDef = {
   title: string;
   requiresSignature: boolean;
   sortOrder: number;
+  /** When this question's answer equals skipWhenEquals, the section is N/A. */
+  skipWhenQuestionId?: string | null;
+  skipWhenEquals?: string | null;
 };
 
 export type InspectionDefinition = {
@@ -176,6 +179,12 @@ export type InspectionDefinition = {
   /** Extra guidance shown above the checklist (e.g. Form 78 instructions). */
   instructionNotes?: string | null;
   isAvailable: boolean;
+  /** SINGLE_SUBMIT (default) or SECTIONED records with per-section save. */
+  workflowMode?: "SINGLE_SUBMIT" | "SECTIONED";
+  /** When SECTIONED: one record per calendar day, or one per Day/Afternoon shift. */
+  dayRecordPolicy?: "ONE" | "PER_SHIFT";
+  /** When SECTIONED: complete sections in list order, or in any order. */
+  sectionOrder?: "ANY" | "STRICT";
   /** When omitted on static definitions, derived from question section titles. */
   sections?: InspectionSectionDef[];
   questions: InspectionQuestionDef[];
@@ -1584,11 +1593,18 @@ export function buildLastAnswerMap(
   for (const item of answers) {
     const questionId = String(item.questionId ?? "").trim();
     const answer = String(item.answer ?? "").trim();
-    if (questionId && answer) {
-      map[questionId] = answer;
+    if (!questionId || !answer) {
+      continue;
     }
+    map[questionId] = answer;
   }
   return map;
+}
+
+export function answersToResponseMap(
+  answers: Array<Pick<InspectionAnswerRecord, "questionId" | "answer">>,
+): Record<string, string> {
+  return buildLastAnswerMap(answers);
 }
 
 export type LastInspectionAnswers = {
@@ -1832,7 +1848,12 @@ export function groupQuestionsBySection(
     }
   }
 
-  const ordered = sections
+  const ordered: Array<{
+    id: string | null;
+    title: string | null;
+    requiresSignature: boolean;
+    questions: InspectionQuestionDef[];
+  }> = sections
     .filter((section) => grouped.has(section.id))
     .map((section) => grouped.get(section.id)!);
 
@@ -1947,6 +1968,8 @@ export function deriveSectionsFromQuestions(
       title,
       requiresSignature: true,
       sortOrder: sections.length,
+      skipWhenQuestionId: null,
+      skipWhenEquals: null,
     });
   }
 

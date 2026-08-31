@@ -68,5 +68,13 @@ export default [
     "inspections/:inspectionId/week-status",
     "routes/inspection-week-status.tsx",
   ),
+  route(
+    "inspections/:inspectionId/records/:runId/sections/:sectionId",
+    "routes/inspection-record-section.tsx",
+  ),
+  route(
+    "inspections/:inspectionId/records/:runId",
+    "routes/inspection-record.tsx",
+  ),
   route("inspections/:inspectionId", "routes/inspection-page.tsx"),
 ] satisfies RouteConfig;

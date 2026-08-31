@@ -245,9 +245,19 @@ function InspectionStatusBadge({ status }: { status: InspectionRunStatus }) {
       className={cn(
         status === "PASSED" && "border-emerald-600/40 text-emerald-700",
         status === "NEEDS_ATTENTION" && "border-amber-600/40 text-amber-800",
+        status === "IN_PROGRESS" && "border-brand/40 text-brand-navy",
+        status === "VOIDED" && "border-muted-foreground/40 text-muted-foreground",
       )}
     >
-      {status === "PASSED" ? "Passed" : "Needs attention"}
+      {status === "PASSED"
+        ? "Passed"
+        : status === "NEEDS_ATTENTION"
+          ? "Needs attention"
+          : status === "IN_PROGRESS"
+            ? "In progress"
+            : status === "VOIDED"
+              ? "Voided"
+              : status}
     </Badge>
   );
 }

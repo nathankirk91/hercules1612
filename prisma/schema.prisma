@@ -27,10 +27,40 @@ enum CalculationRunStatus {
 }
 
 enum InspectionRunStatus {
+  IN_PROGRESS
   PASSED
   NEEDS_ATTENTION
+  VOIDED
 
   @@map("inspection_run_status")
+}
+
+enum InspectionWorkflowMode {
+  SINGLE_SUBMIT
+  SECTIONED
+
+  @@map("inspection_workflow_mode")
+}
+
+enum InspectionDayRecordPolicy {
+  ONE
+  PER_SHIFT
+
+  @@map("inspection_day_record_policy")
+}
+
+enum InspectionSectionOrder {
+  ANY
+  STRICT
+
+  @@map("inspection_section_order")
+}
+
+enum InspectionRunSectionStatus {
+  COMPLETE
+  SKIPPED
+
+  @@map("inspection_run_section_status")
 }
 
 enum InspectionActionStatus {
@@ -75,6 +105,10 @@ model User {
   operatorCalculationRuns    CalculationRun[]  @relation("CalculationOperator")
   submittedInspectionRuns    InspectionRun[]   @relation("InspectionSubmittedBy")
   operatorInspectionRuns     InspectionRun[]   @relation("InspectionOperator")
+  startedInspectionRuns      InspectionRun[]   @relation("InspectionRunStartedBy")
+  voidedInspectionRuns       InspectionRun[]   @relation("InspectionRunVoidedBy")
+  completedRunSections       InspectionRunSection[] @relation("InspectionRunSectionCompletedBy")
+  operatorRunSections        InspectionRunSection[] @relation("InspectionRunSectionOperator")
   submittedPermitRuns        PermitRun[]       @relation("PermitSubmittedBy")
   closedPermitRuns           PermitRun[]       @relation("PermitClosedBy")
   inspectionVersions         InspectionVersion[] @relation("InspectionVersionChangedBy")
@@ -218,6 +252,12 @@ model Inspection {
   fixedEquipmentRef    String?  @map("fixed_equipment_ref")
   /// Master checklist that other inspections can inherit questions from.
   isMasterTemplate     Boolean  @default(false) @map("is_master_template")
+  /// SINGLE_SUBMIT = one page, one submit (default). SECTIONED = records + per-section save.
+  workflowMode         InspectionWorkflowMode @default(SINGLE_SUBMIT) @map("workflow_mode")
+  /// When SECTIONED: one record per calendar day, or one per shift (Day / Afternoon).
+  dayRecordPolicy      InspectionDayRecordPolicy @default(ONE) @map("day_record_policy")
+  /// When SECTIONED: sections may be completed in list order, or in any order.
+  sectionOrder         InspectionSectionOrder @default(ANY) @map("section_order")
   isAvailable          Boolean  @default(true) @map("is_available")
   sortOrder            Int      @default(0) @map("sort_order")
   version              Int      @default(1)
@@ -242,9 +282,13 @@ model InspectionSection {
   requiresSignature Boolean              @default(true) @map("requires_signature")
   sortOrder         Int                  @default(0) @map("sort_order")
   isActive          Boolean              @default(true) @map("is_active")
+  /// When this question's answer equals skipWhenEquals, the section is N/A.
+  skipWhenQuestionId String?             @map("skip_when_question_id")
+  skipWhenEquals    String?              @map("skip_when_equals")
   createdAt         DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt         DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
   questions         InspectionQuestion[]
+  runSections       InspectionRunSection[]
 
   @@index([inspectionId, isActive, sortOrder])
   @@map("inspection_sections")
@@ -306,8 +350,14 @@ model InspectionRun {
   operatorUser       User?                @relation("InspectionOperator", fields: [operatorUserId], references: [id], onDelete: SetNull)
   submittedById      String?              @map("submitted_by_id")
   submittedBy        User?                @relation("InspectionSubmittedBy", fields: [submittedById], references: [id], onDelete: SetNull)
+  startedById        String?              @map("started_by_id")
+  startedBy          User?                @relation("InspectionRunStartedBy", fields: [startedById], references: [id], onDelete: SetNull)
   status             InspectionRunStatus
   equipmentRef       String?              @map("equipment_ref")
+  /// Melbourne civil date YYYY-MM-DD for sectioned records; null on single-submit runs.
+  recordDate         String?              @map("record_date") @db.VarChar(10)
+  /// Day / Afternoon when dayRecordPolicy is PER_SHIFT; null otherwise.
+  shift              String?
   inspectionVersion  Int?                 @map("inspection_version")
   responses          Json
   summary            Json
@@ -315,13 +365,40 @@ model InspectionRun {
   signature          String?
   /// Per-section operator signatures keyed by section title (or __default__).
   sectionSignatures  Json?                @map("section_signatures")
+  voidedAt           DateTime?            @map("voided_at") @db.Timestamptz(6)
+  voidedById         String?              @map("voided_by_id")
+  voidedBy           User?                @relation("InspectionRunVoidedBy", fields: [voidedById], references: [id], onDelete: SetNull)
+  voidReason         String?              @map("void_reason")
   createdAt          DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
   actions            InspectionAction[]   @relation("ActionsCreatedOnRun")
+  sectionCompletions InspectionRunSection[]
 
   @@index([inspectionId])
   @@index([status, createdAt(sort: Desc)])
   @@index([createdAt(sort: Desc)])
+  @@index([inspectionId, recordDate, shift])
   @@map("inspection_runs")
+}
+
+model InspectionRunSection {
+  id             String                     @id @default(cuid())
+  runId          String                     @map("run_id")
+  run            InspectionRun              @relation(fields: [runId], references: [id], onDelete: Cascade)
+  sectionId      String                     @map("section_id")
+  section        InspectionSection          @relation(fields: [sectionId], references: [id], onDelete: Restrict)
+  status         InspectionRunSectionStatus
+  responses      Json
+  signature      String?
+  operatorUserId String?                    @map("operator_user_id")
+  operatorUser   User?                      @relation("InspectionRunSectionOperator", fields: [operatorUserId], references: [id], onDelete: SetNull)
+  completedById  String?                    @map("completed_by_id")
+  completedBy    User?                      @relation("InspectionRunSectionCompletedBy", fields: [completedById], references: [id], onDelete: SetNull)
+  completedAt    DateTime                   @map("completed_at") @db.Timestamptz(6)
+  createdAt      DateTime                   @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([runId, sectionId])
+  @@index([sectionId])
+  @@map("inspection_run_sections")
 }
 
 model InspectionAction {

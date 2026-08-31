@@ -18,7 +18,7 @@ export function parseInspectionHistorySort(
 }
 
 export type InspectionHistorySortable = {
-  status: InspectionSummary["status"];
+  status: "IN_PROGRESS" | "PASSED" | "NEEDS_ATTENTION" | "VOIDED";
   createdAt: Date;
   summary: Pick<InspectionSummary, "attentionCount">;
   actionCount: number;

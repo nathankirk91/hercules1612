@@ -1,4 +1,4 @@
-import { Form, Link, useNavigation } from "react-router";
+import { Form, Link, redirect, useNavigation } from "react-router";
 
 import type { Route } from "./+types/inspection-submission";
 
@@ -53,6 +53,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   if (!run) {
     throw new Response("Inspection submission not found", { status: 404 });
+  }
+  if (run.status === "IN_PROGRESS") {
+    throw redirect(`/inspections/${run.inspectionId}/records/${run.id}`);
   }
 
   const pendingCount = canReviewRuns(user.role)

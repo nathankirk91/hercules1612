@@ -118,6 +118,9 @@ export async function action({ request, params }: Route.ActionArgs) {
           existing.inheritsQuestions
             ? false
             : String(formData.get("isMasterTemplate") ?? "") === "on",
+        workflowMode: String(formData.get("workflowMode") ?? ""),
+        dayRecordPolicy: String(formData.get("dayRecordPolicy") ?? ""),
+        sectionOrder: String(formData.get("sectionOrder") ?? ""),
       });
       return { ok: true as const, message: "Details saved." };
     }
@@ -245,6 +248,8 @@ export async function action({ request, params }: Route.ActionArgs) {
         title: String(formData.get("title") ?? ""),
         requiresSignature:
           String(formData.get("requiresSignature") ?? "") === "on",
+        skipWhenQuestionId: String(formData.get("skipWhenQuestionId") ?? ""),
+        skipWhenEquals: String(formData.get("skipWhenEquals") ?? ""),
       });
       return {
         ok: true as const,
@@ -296,6 +301,7 @@ export async function action({ request, params }: Route.ActionArgs) {
 
 function SectionEditor({
   section,
+  questions,
   index,
   total,
   isEditing,
@@ -303,6 +309,7 @@ function SectionEditor({
   onCancel,
 }: {
   section: InspectionSectionDef;
+  questions: Array<{ id: string; label: string; sectionId?: string | null }>;
   index: number;
   total: number;
   isEditing: boolean;
@@ -341,6 +348,42 @@ function SectionEditor({
               </span>
             </span>
           </label>
+          <div className="grid gap-2">
+            <Label htmlFor={`skip-question-${section.id}`}>
+              Skip this section when
+            </Label>
+            <select
+              id={`skip-question-${section.id}`}
+              name="skipWhenQuestionId"
+              className="flex h-9 w-full rounded-lg border border-input bg-transparent px-3 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+              defaultValue={section.skipWhenQuestionId ?? ""}
+            >
+              <option value="">Never skip</option>
+              {questions
+                .filter((question) => question.sectionId !== section.id)
+                .map((question) => (
+                  <option key={question.id} value={question.id}>
+                    {question.label}
+                  </option>
+                ))}
+            </select>
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor={`skip-equals-${section.id}`}>
+              Answer equals
+            </Label>
+            <Input
+              id={`skip-equals-${section.id}`}
+              name="skipWhenEquals"
+              defaultValue={section.skipWhenEquals ?? ""}
+              placeholder="e.g. Yes"
+              autoComplete="off"
+            />
+            <p className="text-xs text-muted-foreground">
+              If that question is answered with this value, this section is
+              marked not required.
+            </p>
+          </div>
           <div className="flex flex-wrap gap-2">
             <Button type="submit">Save section</Button>
             <Button type="button" variant="outline" onClick={onCancel}>
@@ -364,6 +407,9 @@ function SectionEditor({
             ) : (
               <Badge variant="outline">No signature</Badge>
             )}
+            {section.skipWhenQuestionId ? (
+              <Badge variant="outline">Can skip</Badge>
+            ) : null}
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -691,6 +737,69 @@ export default function InspectionsManageDetailPage({
                   />
                   Show on Inspections page
                 </label>
+                {!inspection.inheritsQuestions ? (
+                  <fieldset className="grid gap-3 rounded-lg border border-border/70 bg-background/50 p-4">
+                    <legend className="px-1 text-sm font-medium text-brand-navy">
+                      Records and sections
+                    </legend>
+                    <p className="text-xs text-muted-foreground">
+                      Default is a single submit of the whole form. Turn on
+                      records to let operators complete sections separately,
+                      including across people and (optionally) Day / Afternoon.
+                    </p>
+                    <div className="grid gap-2">
+                      <Label htmlFor="workflowMode">How operators complete this</Label>
+                      <select
+                        id="workflowMode"
+                        name="workflowMode"
+                        className="flex h-9 w-full rounded-lg border border-input bg-transparent px-3 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                        defaultValue={inspection.workflowMode ?? "SINGLE_SUBMIT"}
+                      >
+                        <option value="SINGLE_SUBMIT">
+                          Single submit (whole form at once)
+                        </option>
+                        <option value="SECTIONED">
+                          Records and sections
+                        </option>
+                      </select>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="dayRecordPolicy">
+                        Records per calendar day
+                      </Label>
+                      <select
+                        id="dayRecordPolicy"
+                        name="dayRecordPolicy"
+                        className="flex h-9 w-full rounded-lg border border-input bg-transparent px-3 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                        defaultValue={inspection.dayRecordPolicy ?? "ONE"}
+                      >
+                        <option value="ONE">One record per day</option>
+                        <option value="PER_SHIFT">
+                          One record per shift (Day and Afternoon)
+                        </option>
+                      </select>
+                    </div>
+                    <div className="grid gap-2">
+                      <Label htmlFor="sectionOrder">Section order</Label>
+                      <select
+                        id="sectionOrder"
+                        name="sectionOrder"
+                        className="flex h-9 w-full rounded-lg border border-input bg-transparent px-3 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                        defaultValue={inspection.sectionOrder ?? "ANY"}
+                      >
+                        <option value="ANY">Any order</option>
+                        <option value="STRICT">
+                          Strict (list order — next section unlocks after the
+                          previous is done or skipped)
+                        </option>
+                      </select>
+                    </div>
+                  </fieldset>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    Record settings are inherited from the master template.
+                  </p>
+                )}
                 <div>
                   <Button type="submit">Save details</Button>
                 </div>
@@ -844,6 +953,7 @@ export default function InspectionsManageDetailPage({
                       <SectionEditor
                         key={section.id}
                         section={section}
+                        questions={inspection.questions}
                         index={index}
                         total={sections.length}
                         isEditing={editingSectionId === section.id}

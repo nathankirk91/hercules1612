@@ -15,7 +15,7 @@ import {
 export type InspectionDocumentInput = {
   id: string;
   inspectionTitle: string;
-  status: "PASSED" | "NEEDS_ATTENTION";
+  status: "IN_PROGRESS" | "PASSED" | "NEEDS_ATTENTION" | "VOIDED";
   operatorName: string | null;
   equipmentRef: string | null;
   createdAt: Date;
@@ -48,7 +48,16 @@ export type InspectionDocumentInput = {
 export function inspectionStatusLabel(
   status: InspectionDocumentInput["status"],
 ): string {
-  return status === "NEEDS_ATTENTION" ? "Needs attention" : "Passed";
+  if (status === "NEEDS_ATTENTION") {
+    return "Needs attention";
+  }
+  if (status === "IN_PROGRESS") {
+    return "In progress";
+  }
+  if (status === "VOIDED") {
+    return "Voided";
+  }
+  return "Passed";
 }
 
 function formatActionLine(

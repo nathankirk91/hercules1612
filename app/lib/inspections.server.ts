@@ -36,6 +36,11 @@ import {
   parsePermitFieldRole,
   inferPermitFieldRoleFromId,
 } from "~/lib/inspections";
+import {
+  parseDayRecordPolicy,
+  parseSectionOrder,
+  parseWorkflowMode,
+} from "~/lib/inspection-workflow";
 
 function clampRequiredSignerCount(value: unknown): number {
   const n = typeof value === "number" ? value : Number(value);
@@ -78,7 +83,11 @@ function attentionJsonForType(
 
 export type { InspectionHistorySort };
 
-export type InspectionRunStatus = "PASSED" | "NEEDS_ATTENTION";
+export type InspectionRunStatus =
+  | "IN_PROGRESS"
+  | "PASSED"
+  | "NEEDS_ATTENTION"
+  | "VOIDED";
 
 export type ManagedInspection = {
   id: string;
@@ -216,7 +225,7 @@ function isMissingInspectionSchemaError(error: unknown): boolean {
     return true;
   }
   const message = error instanceof Error ? error.message : String(error);
-  return /applicable_shifts|first_of_week_only|applicable_equipment_refs|show_last_value|template_inspection_id|fixed_equipment_ref|is_master_template|section_id|inspection_sections|inspection_categories|does not exist|ColumnNotFound/i.test(
+  return /applicable_shifts|first_of_week_only|applicable_equipment_refs|show_last_value|template_inspection_id|fixed_equipment_ref|is_master_template|section_id|inspection_sections|inspection_categories|workflow_mode|day_record_policy|section_order|skip_when|record_date|inspection_run_sections|does not exist|ColumnNotFound/i.test(
     message,
   );
 }
@@ -231,12 +240,16 @@ function mapSection(row: {
   title: string;
   requiresSignature: boolean;
   sortOrder: number;
+  skipWhenQuestionId?: string | null;
+  skipWhenEquals?: string | null;
 }): InspectionSectionDef {
   return {
     id: row.id,
     title: row.title,
     requiresSignature: row.requiresSignature,
     sortOrder: row.sortOrder,
+    skipWhenQuestionId: row.skipWhenQuestionId ?? null,
+    skipWhenEquals: row.skipWhenEquals ?? null,
   };
 }
 
@@ -302,11 +315,16 @@ function mapDefinition(row: {
   fixedEquipmentRef?: string | null;
   isAvailable: boolean;
   sortOrder: number;
+  workflowMode?: unknown;
+  dayRecordPolicy?: unknown;
+  sectionOrder?: unknown;
   sections?: Array<{
     id: string;
     title: string;
     requiresSignature: boolean;
     sortOrder: number;
+    skipWhenQuestionId?: string | null;
+    skipWhenEquals?: string | null;
   }>;
   questions: Array<{
     id: string;
@@ -340,6 +358,9 @@ function mapDefinition(row: {
     fixedEquipmentRef: row.fixedEquipmentRef ?? null,
     isAvailable: row.isAvailable,
     sortOrder: row.sortOrder,
+    workflowMode: parseWorkflowMode(row.workflowMode),
+    dayRecordPolicy: parseDayRecordPolicy(row.dayRecordPolicy),
+    sectionOrder: parseSectionOrder(row.sectionOrder),
     sections: (row.sections ?? []).map(mapSection),
     questions: row.questions.map(mapQuestion),
   };
@@ -452,6 +473,9 @@ async function getInspectionDefinitionOnce(
   let questions = row.questions;
   let sections = row.sections;
   let shortNameFallback: string | undefined;
+  let workflowMode = row.workflowMode;
+  let dayRecordPolicy = row.dayRecordPolicy;
+  let sectionOrder = row.sectionOrder;
 
   if (row.templateInspectionId) {
     const template = await prisma.inspection.findUnique({
@@ -470,11 +494,21 @@ async function getInspectionDefinitionOnce(
     if (template) {
       questions = template.questions;
       sections = template.sections;
+      workflowMode = template.workflowMode;
+      dayRecordPolicy = template.dayRecordPolicy;
+      sectionOrder = template.sectionOrder;
     }
     shortNameFallback = getFallbackInspectionByIdOrSlug(row.id)?.shortName;
   }
 
-  const definition = mapDefinition({ ...row, questions, sections });
+  const definition = mapDefinition({
+    ...row,
+    questions,
+    sections,
+    workflowMode,
+    dayRecordPolicy,
+    sectionOrder,
+  });
   if (shortNameFallback) {
     definition.shortName = shortNameFallback;
   }
@@ -755,6 +789,15 @@ async function getManagedInspectionOnce(
       ...row,
       questions: questionRows,
       sections: sectionRows,
+      workflowMode: inheritsQuestions
+        ? row.template!.workflowMode
+        : row.workflowMode,
+      dayRecordPolicy: inheritsQuestions
+        ? row.template!.dayRecordPolicy
+        : row.dayRecordPolicy,
+      sectionOrder: inheritsQuestions
+        ? row.template!.sectionOrder
+        : row.sectionOrder,
     }),
   );
 
@@ -855,6 +898,12 @@ function parseVersionSnapshot(value: unknown): InspectionVersionSnapshot {
           title: String(row.title ?? ""),
           requiresSignature: row.requiresSignature !== false,
           sortOrder: Number(row.sortOrder ?? 0),
+          skipWhenQuestionId: row.skipWhenQuestionId
+            ? String(row.skipWhenQuestionId)
+            : null,
+          skipWhenEquals: row.skipWhenEquals
+            ? String(row.skipWhenEquals)
+            : null,
         } satisfies InspectionSectionDef;
       })
     : [];
@@ -922,6 +971,8 @@ function normalizeSectionsForCompare(sections: InspectionSectionDef[]) {
     title: section.title,
     requiresSignature: section.requiresSignature,
     sortOrder: section.sortOrder,
+    skipWhenQuestionId: section.skipWhenQuestionId ?? null,
+    skipWhenEquals: section.skipWhenEquals ?? null,
   }));
 }
 
@@ -1071,6 +1122,7 @@ async function bumpInspectionVersion(args: {
       description: inspection.description,
       category: inspection.category,
       equipmentLabel: inspection.equipmentLabel,
+      sections: [],
       questions: questions.map(mapQuestion),
     };
 
@@ -1451,6 +1503,9 @@ export async function updateManagedInspection(args: {
   isAvailable: boolean;
   requiredSignerCount?: number | null;
   isMasterTemplate?: boolean;
+  workflowMode?: string;
+  dayRecordPolicy?: string;
+  sectionOrder?: string;
 }): Promise<void> {
   const prisma = getPrisma();
   if (!prisma) {
@@ -1507,6 +1562,9 @@ export async function updateManagedInspection(args: {
       equipmentLabel: args.equipmentLabel.trim() || null,
       requiredSignerCount,
       isAvailable: args.isAvailable,
+      workflowMode: parseWorkflowMode(args.workflowMode),
+      dayRecordPolicy: parseDayRecordPolicy(args.dayRecordPolicy),
+      sectionOrder: parseSectionOrder(args.sectionOrder),
       ...(args.isMasterTemplate === undefined
         ? {}
         : { isMasterTemplate: args.isMasterTemplate && !isPermit }),
@@ -1643,6 +1701,8 @@ export async function updateInspectionSection(args: {
   sectionId: string;
   title: string;
   requiresSignature: boolean;
+  skipWhenQuestionId?: string | null;
+  skipWhenEquals?: string | null;
 }): Promise<InspectionSectionDef> {
   const prisma = getPrisma();
   if (!prisma) {
@@ -1668,6 +1728,8 @@ export async function updateInspectionSection(args: {
     data: {
       title,
       requiresSignature: args.requiresSignature,
+      skipWhenQuestionId: args.skipWhenQuestionId?.trim() || null,
+      skipWhenEquals: args.skipWhenEquals?.trim() || null,
     },
   });
 
@@ -2299,6 +2361,7 @@ export async function listForkliftChecksForDay(
   const rows = await prisma.inspectionRun.findMany({
     where: {
       equipmentRef: { in: [...unitValues] },
+      status: { in: ["PASSED", "NEEDS_ATTENTION"] },
       createdAt: {
         gte: bounds.start,
         lt: bounds.end,

@@ -61,6 +61,8 @@ type Props = {
   summary?: InspectionSummary | null;
   status?: InspectionSummary["status"] | null;
   formError?: string | null;
+  submitLabel?: string;
+  hideResultCard?: boolean;
 };
 
 export function InspectionChecklistForm({
@@ -76,6 +78,8 @@ export function InspectionChecklistForm({
   summary,
   status,
   formError,
+  submitLabel,
+  hideResultCard = false,
 }: Props) {
   const navigation = useNavigation();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -172,13 +176,20 @@ export function InspectionChecklistForm({
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+    <div
+      className={cn(
+        "grid gap-6",
+        !hideResultCard &&
+          "lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]",
+      )}
+    >
       <Card>
         <CardHeader>
           <CardTitle>{isPermit ? "Permit form" : "Checklist"}</CardTitle>
           <CardDescription>
-            Answer each question, then sign and submit to record this
-            inspection.
+            {hideResultCard
+              ? "Answer this section, sign if required, then save. First save wins."
+              : "Answer each question, then sign and submit to record this inspection."}
           </CardDescription>
         </CardHeader>
         <Form method="post" {...getFormProps(form)}>
@@ -683,12 +694,13 @@ export function InspectionChecklistForm({
                 ? "Saving…"
                 : definition.questions.length === 0
                   ? `No questions configured`
-                  : `Submit ${formNoun}`}
+                  : submitLabel ?? `Submit ${formNoun}`}
             </Button>
           </CardFooter>
         </Form>
       </Card>
 
+      {hideResultCard ? null : (
       <Card className="h-fit lg:sticky lg:top-24">
         <CardHeader>
           <CardTitle>Result</CardTitle>
@@ -748,6 +760,7 @@ export function InspectionChecklistForm({
           )}
         </CardContent>
       </Card>
+      )}
     </div>
   );
 }
