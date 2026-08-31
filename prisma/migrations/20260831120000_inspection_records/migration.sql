@@ -43,7 +43,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS "inspection_runs_active_record_key"
     "record_date",
     COALESCE("shift", '')
   )
-  WHERE "status" <> 'VOIDED' AND "record_date" IS NOT NULL;
+  WHERE "record_date" IS NOT NULL AND "voided_at" IS NULL;
 
 DO $$ BEGIN
   ALTER TABLE "inspection_runs"
