@@ -22,7 +22,6 @@ import { formatMelbourneDateTime } from "~/lib/datetime";
 import {
   formatLastAnswerDisplay,
   sectionSignatureKey,
-  sectionSignatureLabel,
   type InspectionAnswerRecord,
   type InspectionQuestionType,
 } from "~/lib/inspections";
@@ -307,12 +306,16 @@ export default function InspectionSubmissionPage({
                   {sectionSignature ? (
                     <div className="mt-4 border-t border-border/60 pt-3">
                       <p className="text-sm font-medium">
-                        {sectionSignatureLabel(signatureKey)} signature
+                        {group.title ? `${group.title} signature` : "Signature"}
                       </p>
                       <div className="mt-2">
                         <img
                           src={sectionSignature}
-                          alt={`${sectionSignatureLabel(signatureKey)} signature`}
+                          alt={
+                            group.title
+                              ? `${group.title} signature`
+                              : "Signature"
+                          }
                           className="h-20 w-auto rounded border border-border/50 bg-white object-contain sm:h-28"
                         />
                       </div>

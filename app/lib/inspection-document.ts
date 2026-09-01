@@ -2,7 +2,6 @@ import { formatMelbourneDateTime, melbourneDateYmd } from "~/lib/datetime";
 import type { InspectionAnswerRecord } from "~/lib/inspections";
 import {
   sectionSignatureKey,
-  sectionSignatureLabel,
 } from "~/lib/inspections";
 import {
   buildRecordFilename,
@@ -144,7 +143,7 @@ export function buildInspectionDocument(
       const imageDataUrl = sectionSignatures[key] ?? null;
       blocks.push({
         kind: "signatures",
-        title: `${sectionSignatureLabel(key)} signature`,
+        title: `${group.title === "Answers" ? "Section" : group.title} signature`,
         signatures: [
           {
             label: "Signature / initials",

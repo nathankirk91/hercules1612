@@ -252,6 +252,46 @@ assert.equal(buildRecordFilename(["", null]), "record.pdf");
 }
 
 {
+  const generatedAt = new Date("2026-09-01T01:00:00.000Z");
+  const doc = buildInspectionDocument({
+    id: "run-managed-sections",
+    inspectionTitle: "Daily Start-up",
+    status: "PASSED",
+    operatorName: "Plant Operator",
+    equipmentRef: "Hercules 1612",
+    createdAt: generatedAt,
+    notes: null,
+    signature: null,
+    sectionSignatures: {
+      "cmti45pv7000b04l7j4qs2xwl": SAMPLE_SIGNATURE,
+    },
+    summary: {
+      answeredCount: 1,
+      attentionCount: 0,
+      attentionItems: [],
+    },
+    answers: [
+      {
+        questionId: "walkabout",
+        label: "Site walkabout completed",
+        sectionTitle: "Site Environmental",
+        sectionId: "cmti45pv7000b04l7j4qs2xwl",
+        type: "YES_NO",
+        answer: "Yes",
+        flagged: false,
+      },
+    ],
+    actions: [],
+  });
+
+  const signatureBlocks = doc.blocks.filter(
+    (block) => block.kind === "signatures",
+  );
+  assert.equal(signatureBlocks.length, 1);
+  assert.equal(signatureBlocks[0]?.title, "Site Environmental signature");
+}
+
+{
   // Legacy runs without sectionSignatures still render a single operator signature.
   const generatedAt = new Date("2026-08-17T01:00:00.000Z");
   const doc = buildInspectionDocument(
