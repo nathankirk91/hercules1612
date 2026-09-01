@@ -27,6 +27,7 @@ import {
 } from "~/hooks/use-manage-add-feedback";
 import { countPendingRuns } from "~/lib/approvals.server";
 import { requireOperatorManager } from "~/lib/auth.server";
+import { dataWithToast } from "~/lib/toast.server";
 import {
   PERMIT_CATEGORY,
   isPermitInspection,
@@ -124,12 +125,16 @@ export async function action({ request, params }: Route.ActionArgs) {
           inspectionId,
           ...parsed,
         });
-        return {
-          ok: true as const,
-          intent: "add-question" as const,
-          message:
-            "Question added. Publish a revision when your checklist edits are ready.",
-        };
+        return dataWithToast(
+          {
+            ok: true as const,
+            intent: "add-question" as const,
+          },
+          {
+            description: "Question added",
+            type: "success",
+          },
+        );
       }
 
       const questionId = String(formData.get("questionId") ?? "");

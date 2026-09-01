@@ -27,6 +27,7 @@ import {
 } from "~/hooks/use-manage-add-feedback";
 import { countPendingRuns } from "~/lib/approvals.server";
 import { requireOperatorManager } from "~/lib/auth.server";
+import { dataWithToast } from "~/lib/toast.server";
 import {
   isPermitInspection,
   parseChecklistQuestionFormData,
@@ -174,12 +175,16 @@ export async function action({ request, params }: Route.ActionArgs) {
           inspectionId,
           ...parsed,
         });
-        return {
-          ok: true as const,
-          intent: "add-question" as const,
-          message:
-            "Question added. Publish a revision when your checklist edits are ready.",
-        };
+        return dataWithToast(
+          {
+            ok: true as const,
+            intent: "add-question" as const,
+          },
+          {
+            description: "Question added",
+            type: "success",
+          },
+        );
       }
 
       const questionId = String(formData.get("questionId") ?? "");
@@ -236,12 +241,16 @@ export async function action({ request, params }: Route.ActionArgs) {
         requiresSignature:
           String(formData.get("requiresSignature") ?? "") === "on",
       });
-      return {
-        ok: true as const,
-        intent: "add-section" as const,
-        message:
-          "Section added. Publish a revision when your checklist edits are ready.",
-      };
+      return dataWithToast(
+        {
+          ok: true as const,
+          intent: "add-section" as const,
+        },
+        {
+          description: "Section added",
+          type: "success",
+        },
+      );
     }
 
     if (intent === "update-section") {

@@ -1,10 +1,6 @@
 import { useEffect, useRef } from "react";
-import { toast } from "sonner";
 
-import {
-  getManageAddToastMessage,
-  type ManageActionData,
-} from "~/lib/manage-add-feedback";
+import type { ManageActionData } from "~/lib/manage-add-feedback";
 
 export type { ManageActionData, ManageSuccessAction } from "~/lib/manage-add-feedback";
 export {
@@ -31,13 +27,11 @@ export function useManageAddFeedback(
       return;
     }
 
-    const toastMessage = getManageAddToastMessage(actionData.intent);
-    if (!toastMessage) {
+    if (actionData.intent !== "add-section" && actionData.intent !== "add-question") {
       return;
     }
 
     processed.current = actionData;
-    toast.success(toastMessage);
 
     if (actionData.intent === "add-section") {
       callbacksRef.current.onAddSection?.();

@@ -1,15 +1,20 @@
 import {
+  data,
   isRouteErrorResponse,
   Links,
   Meta,
   Outlet,
   Scripts,
   ScrollRestoration,
+  useLoaderData,
 } from "react-router";
 
+import { useToast } from "~/components/toaster";
 import { Button } from "~/components/ui/button";
 import { Toaster } from "~/components/ui/sonner";
 import { APP_NAME } from "~/lib/brand";
+import { combineHeaders } from "~/lib/headers";
+import { getToast } from "~/lib/toast.server";
 import type { Route } from "./+types/root";
 import "./app.css";
 
@@ -31,6 +36,11 @@ export const links: Route.LinksFunction = () => [
   { rel: "shortcut icon", href: "/brand/favicon.ico" },
   { rel: "apple-touch-icon", href: "/brand/apple-touch-icon.png" },
 ];
+
+export async function loader({ request }: Route.LoaderArgs) {
+  const { toast, headers: toastHeaders } = await getToast(request);
+  return data({ toast }, { headers: combineHeaders(toastHeaders) });
+}
 
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
@@ -55,6 +65,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+  const { toast } = useLoaderData<typeof loader>();
+  useToast(toast);
+
   return <Outlet />;
 }
 
