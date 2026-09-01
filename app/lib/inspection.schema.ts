@@ -20,6 +20,19 @@ function emptyToUndefined(value: unknown) {
   return value;
 }
 
+/** Conform may submit list fields as `{ "0": "…" }` — normalize and drop blanks. */
+function normalizeStringList(value: unknown): string[] {
+  if (value == null) {
+    return [];
+  }
+  const items = Array.isArray(value)
+    ? value
+    : typeof value === "object"
+      ? Object.values(value as Record<string, unknown>)
+      : [value];
+  return items.map((item) => String(item).trim()).filter(Boolean);
+}
+
 export type InspectionSchemaContext = {
   /** Melbourne Mon–Sun week; defaults to true when omitted. */
   isFirstInspectionOfWeek?: boolean;
@@ -145,9 +158,14 @@ export function createInspectionFormSchema(
           .max(2000, "Notes must be under 2000 characters.")
           .optional(),
       ),
-      actions: z
-        .array(z.string().trim().max(2000, "Keep each action under 2000 characters."))
-        .default([]),
+      actions: z.preprocess(
+        normalizeStringList,
+        z
+          .array(
+            z.string().max(2000, "Keep each action under 2000 characters."),
+          )
+          .default([]),
+      ),
       sectionSignatures: z.object(sectionSignatureShape).default({}),
       responses: z.object(responseShape),
     })
