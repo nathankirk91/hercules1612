@@ -8,6 +8,7 @@ import {
 } from "react-router";
 
 import { Button } from "~/components/ui/button";
+import { Toaster } from "~/components/ui/sonner";
 import { APP_NAME } from "~/lib/brand";
 import type { Route } from "./+types/root";
 import "./app.css";
@@ -45,6 +46,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </head>
       <body className="min-h-screen overflow-x-hidden bg-background text-foreground antialiased">
         {children}
+        <Toaster richColors closeButton position="top-center" />
         <ScrollRestoration />
         <Scripts />
       </body>

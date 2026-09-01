@@ -1,5 +1,5 @@
 import { data, Form, Link, redirect } from "react-router";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 
 import type { Route } from "./+types/permits-manage-detail";
 
@@ -21,6 +21,10 @@ import {
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { Textarea } from "~/components/ui/textarea";
+import {
+  useManageAddFeedback,
+  shouldShowInlineManageMessage,
+} from "~/hooks/use-manage-add-feedback";
 import { countPendingRuns } from "~/lib/approvals.server";
 import { requireOperatorManager } from "~/lib/auth.server";
 import {
@@ -122,6 +126,7 @@ export async function action({ request, params }: Route.ActionArgs) {
         });
         return {
           ok: true as const,
+          intent: "add-question" as const,
           message:
             "Question added. Publish a revision when your checklist edits are ready.",
         };
@@ -283,6 +288,17 @@ export default function PermitsManageDetailPage({
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(
     null,
   );
+  const [questionFormKey, setQuestionFormKey] = useState(0);
+
+  const resetQuestionForm = useCallback(() => {
+    setQuestionFormKey((key) => key + 1);
+    setQuestionType("YES_NO");
+    setRadioOptions("OK\nNeeds attention\nN/A");
+  }, []);
+
+  useManageAddFeedback(actionData, {
+    onAddQuestion: resetQuestionForm,
+  });
 
   return (
     <div className="app-shell">
@@ -321,7 +337,7 @@ export default function PermitsManageDetailPage({
           {actionData && "error" in actionData && actionData.error ? (
             <p className="mt-3 text-sm text-destructive">{actionData.error}</p>
           ) : null}
-          {actionData && "message" in actionData && actionData.message ? (
+          {shouldShowInlineManageMessage(actionData) ? (
             <p className="mt-3 text-sm text-emerald-700">{actionData.message}</p>
           ) : null}
         </div>
@@ -406,7 +422,7 @@ export default function PermitsManageDetailPage({
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Form method="post" className="grid gap-4">
+              <Form key={questionFormKey} method="post" className="grid gap-4">
                 <input type="hidden" name="intent" value="add-question" />
                 <ChecklistQuestionFields
                   kind="permit"
