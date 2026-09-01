@@ -7,6 +7,7 @@ import {
 } from "@conform-to/react";
 import { parseWithZod } from "@conform-to/zod/v4";
 import { formatPaths } from "@conform-to/dom";
+import { useRef } from "react";
 import { Form, useNavigation, useSearchParams } from "react-router";
 
 import { Badge } from "~/components/ui/badge";
@@ -24,7 +25,7 @@ import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "~/components/ui/radio-group";
 import { Textarea } from "~/components/ui/textarea";
-import { SignaturePad } from "~/components/signature-pad";
+import { SignaturePad, type SignaturePadHandle } from "~/components/signature-pad";
 import { createInspectionFormSchema } from "~/lib/inspection.schema";
 import {
   YES_NO_OPTIONS,
@@ -151,6 +152,7 @@ export function InspectionChecklistForm({
   const responseFields = fields.responses.getFieldset();
   const sectionSignatureFields = fields.sectionSignatures.getFieldset();
   const actionFields = fields.actions.getFieldList();
+  const signaturePadRefs = useRef(new Map<string, SignaturePadHandle | null>());
   const isPermit = isPermitInspection(definition);
   const formNoun = isPermit ? "permit" : "inspection";
 
@@ -176,6 +178,19 @@ export function InspectionChecklistForm({
     });
   }
 
+  const formProps = getFormProps(form);
+
+  function updateSectionSignature(name: string, signature: string) {
+    form.update({ name, value: signature });
+    form.validate({ name });
+  }
+
+  function flushSectionSignatures() {
+    for (const pad of signaturePadRefs.current.values()) {
+      pad?.flush();
+    }
+  }
+
   return (
     <div
       className={cn(
@@ -193,7 +208,14 @@ export function InspectionChecklistForm({
               : "Answer each question, then sign and submit to record this inspection."}
           </CardDescription>
         </CardHeader>
-        <Form method="post" {...getFormProps(form)}>
+        <Form
+          method="post"
+          {...formProps}
+          onSubmit={(event) => {
+            flushSectionSignatures();
+            formProps.onSubmit(event);
+          }}
+        >
           <CardContent className="grid gap-8 pb-6">
             {fixedEquipmentRef ? (
               <section className="grid gap-2">
@@ -529,16 +551,18 @@ export function InspectionChecklistForm({
                       : "Signature / initials"}
                   </Label>
                   <SignaturePad
+                    ref={(pad) => {
+                      if (pad) {
+                        signaturePadRefs.current.set(signatureKey, pad);
+                      } else {
+                        signaturePadRefs.current.delete(signatureKey);
+                      }
+                    }}
                     name={signatureFieldName}
                     id={signatureField?.id ?? `section-signature-${signatureKey}`}
-                    required
                     error={signatureField?.errors?.join(" ")}
                     onChange={(signature) => {
-                      form.update({
-                        name: signatureFieldName,
-                        value: signature,
-                        validated: false,
-                      });
+                      updateSectionSignature(signatureFieldName, signature);
                     }}
                   />
                 </div>

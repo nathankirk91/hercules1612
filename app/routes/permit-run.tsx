@@ -613,14 +613,13 @@ function SignOffForm({
             <SignaturePad
               name={fields.signature.name}
               id={fields.signature.id}
-              required
               error={fields.signature.errors?.join(" ")}
               onChange={(signature) => {
                 form.update({
                   name: fields.signature.name,
                   value: signature,
-                  validated: false,
                 });
+                form.validate({ name: fields.signature.name });
               }}
             />
           </div>
@@ -723,14 +722,13 @@ function CloseoutForm({
             <SignaturePad
               name={fields.operatorsInitials.name}
               id={fields.operatorsInitials.id}
-              required
               error={fields.operatorsInitials.errors?.join(" ")}
               onChange={(signature) => {
                 form.update({
                   name: fields.operatorsInitials.name,
                   value: signature,
-                  validated: false,
                 });
+                form.validate({ name: fields.operatorsInitials.name });
               }}
             />
           </div>
@@ -739,14 +737,13 @@ function CloseoutForm({
             <SignaturePad
               name={fields.maintenanceInitials.name}
               id={fields.maintenanceInitials.id}
-              required
               error={fields.maintenanceInitials.errors?.join(" ")}
               onChange={(signature) => {
                 form.update({
                   name: fields.maintenanceInitials.name,
                   value: signature,
-                  validated: false,
                 });
+                form.validate({ name: fields.maintenanceInitials.name });
               }}
             />
           </div>

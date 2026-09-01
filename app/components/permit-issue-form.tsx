@@ -437,14 +437,13 @@ export function PermitIssueForm({
                         <SignaturePad
                           name={person.signature.name}
                           id={person.signature.id}
-                          required={index === 0}
                           error={person.signature.errors?.join(" ")}
                           onChange={(signature) => {
                             form.update({
                               name: person.signature.name,
                               value: signature,
-                              validated: false,
                             });
+                            form.validate({ name: person.signature.name });
                           }}
                         />
                       </div>
