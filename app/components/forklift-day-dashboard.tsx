@@ -1,4 +1,4 @@
-import { Link } from "react-router";
+import { Form, Link } from "react-router";
 
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
@@ -62,9 +62,10 @@ export function ForkliftDayDashboardCard({
         </div>
 
         {filterAction ? (
-          <form
+          <Form
             method="get"
             action={filterAction}
+            preventScrollReset
             className="flex flex-wrap items-end gap-3"
           >
             {hiddenFields
@@ -85,7 +86,7 @@ export function ForkliftDayDashboardCard({
             <Button type="submit" variant="secondary" size="sm">
               Show day
             </Button>
-          </form>
+          </Form>
         ) : null}
       </CardHeader>
       <CardContent>
