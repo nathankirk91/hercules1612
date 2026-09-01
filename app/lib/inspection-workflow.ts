@@ -162,6 +162,23 @@ export function evaluateSectionProgress(args: {
   return items;
 }
 
+export function sortSectionProgressForDisplay(
+  progress: SectionProgressItem[],
+): SectionProgressItem[] {
+  const incomplete: SectionProgressItem[] = [];
+  const finished: SectionProgressItem[] = [];
+
+  for (const item of progress) {
+    if (item.status === "available" || item.status === "locked") {
+      incomplete.push(item);
+    } else {
+      finished.push(item);
+    }
+  }
+
+  return [...incomplete, ...finished];
+}
+
 export function requiredSectionsRemaining(
   progress: SectionProgressItem[],
 ): number {

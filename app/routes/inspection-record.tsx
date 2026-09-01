@@ -22,7 +22,10 @@ import {
   getInspectionRecordDetail,
   voidInspectionRecord,
 } from "~/lib/inspection-record.server";
-import { recordLabel } from "~/lib/inspection-workflow";
+import {
+  recordLabel,
+  sortSectionProgressForDisplay,
+} from "~/lib/inspection-workflow";
 import { isPermitInspection } from "~/lib/inspections";
 import { getInspectionDefinition } from "~/lib/inspections.server";
 import { canReviewRuns } from "~/lib/roles";
@@ -149,7 +152,7 @@ export default function InspectionRecordPage({
           </CardHeader>
           <CardContent>
             <ol className="grid gap-3">
-              {record.progress.map((item) => (
+              {sortSectionProgressForDisplay(record.progress).map((item) => (
                 <li
                   key={item.section.id}
                   className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/70 bg-background/50 px-3 py-3"

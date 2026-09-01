@@ -12,6 +12,7 @@ const {
   requiredSectionsRemaining,
   sectionIsSkippedByAnswers,
   sectionsNeedingSkip,
+  sortSectionProgressForDisplay,
 } = await import("./inspection-workflow.ts");
 
 {
@@ -133,6 +134,25 @@ const after = {
   assert.deepEqual(
     needing.map((section) => section.id),
     [after.id],
+  );
+}
+
+{
+  const progress = [
+    { section: before, status: "complete", completedByName: "A", completedAt: null },
+    { section: tagged, status: "available", completedByName: null, completedAt: null },
+    { section: after, status: "complete", completedByName: "B", completedAt: null },
+    {
+      section: { id: "sec-extra", title: "Extra", requiresSignature: false, sortOrder: 4 },
+      status: "locked",
+      completedByName: null,
+      completedAt: null,
+    },
+  ];
+  const sorted = sortSectionProgressForDisplay(progress);
+  assert.deepEqual(
+    sorted.map((item) => item.section.id),
+    [tagged.id, "sec-extra", before.id, after.id],
   );
 }
 
