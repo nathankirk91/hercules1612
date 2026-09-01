@@ -111,6 +111,7 @@ export default function InspectionsHistoryPage({
 
         <Form
           method="get"
+          preventScrollReset
           className="mb-6 flex flex-wrap items-end gap-3 rounded-xl border border-border/70 bg-background/60 p-4"
         >
           <div className="grid gap-1.5">
@@ -142,7 +143,9 @@ export default function InspectionsHistoryPage({
             {filtering ? "Updating…" : "Apply"}
           </Button>
           <Button asChild variant="ghost" size="sm">
-            <Link to="/inspections/history">Today</Link>
+            <Link to="/inspections/history" preventScrollReset>
+              Today
+            </Link>
           </Button>
         </Form>
 

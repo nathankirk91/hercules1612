@@ -195,7 +195,11 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                 Which forklifts have been inspected on {dayLabel}.
               </p>
             </div>
-            <Form method="get" className="flex flex-wrap items-end gap-2">
+            <Form
+              method="get"
+              preventScrollReset
+              className="flex flex-wrap items-end gap-2"
+            >
               <div className="grid gap-1.5">
                 <Label htmlFor="home-date" className="sr-only">
                   Date
