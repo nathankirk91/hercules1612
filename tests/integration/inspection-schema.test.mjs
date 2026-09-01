@@ -17,6 +17,10 @@ const {
 const { createInspectionSchema } = await import(
   "../../app/lib/inspection.schema.ts"
 );
+const { createInspectionFormSchema } = await import(
+  "../../app/lib/inspection.schema.ts"
+);
+const { parseWithZod } = await import("@conform-to/zod/v4");
 
 function sectionSignaturesFor(questions, value = "JD") {
   return Object.fromEntries(
@@ -284,6 +288,38 @@ const unitQuestions = filterQuestionsForEquipment(
     ]),
     ["A", "B", "__default__"],
   );
+}
+
+{
+  // Empty action rows from Conform list fields should not block submit.
+  const schema = createInspectionFormSchema({
+    ...FORKLIFT_DAILY_CHECK_TEMPLATE,
+    questions: [],
+    sections: [],
+  });
+  const formData = new FormData();
+  formData.set("operatorId", "op-1");
+  formData.set("actions.0", "");
+  const parsed = parseWithZod(formData, { schema });
+  assert.equal(parsed.status, "success");
+  assert.deepEqual(parsed.value?.actions, []);
+}
+
+{
+  const schema = createInspectionSchema({
+    ...FORKLIFT_DAILY_CHECK_TEMPLATE,
+    questions: [],
+    sections: [],
+  });
+  const parsed = schema.safeParse({
+    operatorId: "op-1",
+    notes: "",
+    actions: { 0: "Follow up on spill kit" },
+    sectionSignatures: {},
+    responses: {},
+  });
+  assert.equal(parsed.success, true);
+  assert.deepEqual(parsed.data.actions, ["Follow up on spill kit"]);
 }
 
 console.log("inspection-schema integration tests passed");

@@ -136,7 +136,7 @@ export function InspectionChecklistForm({
       operatorId: "",
       equipmentRef: fixedEquipmentRef || equipmentRef || "",
       notes: "",
-      actions: [""],
+      actions: [],
       sectionSignatures: Object.fromEntries(
         sectionSignatureKeysForDefinition(
           definition,
