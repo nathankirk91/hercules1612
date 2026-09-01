@@ -1,5 +1,5 @@
 import { data, Form, Link, redirect } from "react-router";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 
 import type { Route } from "./+types/inspections-manage-detail";
 
@@ -21,8 +21,13 @@ import {
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { Textarea } from "~/components/ui/textarea";
+import {
+  useManageAddFeedback,
+  shouldShowInlineManageMessage,
+} from "~/hooks/use-manage-add-feedback";
 import { countPendingRuns } from "~/lib/approvals.server";
 import { requireOperatorManager } from "~/lib/auth.server";
+import { dataWithToast } from "~/lib/toast.server";
 import {
   isPermitInspection,
   parseChecklistQuestionFormData,
@@ -170,11 +175,16 @@ export async function action({ request, params }: Route.ActionArgs) {
           inspectionId,
           ...parsed,
         });
-        return {
-          ok: true as const,
-          message:
-            "Question added. Publish a revision when your checklist edits are ready.",
-        };
+        return dataWithToast(
+          {
+            ok: true as const,
+            intent: "add-question" as const,
+          },
+          {
+            description: "Question added",
+            type: "success",
+          },
+        );
       }
 
       const questionId = String(formData.get("questionId") ?? "");
@@ -231,11 +241,16 @@ export async function action({ request, params }: Route.ActionArgs) {
         requiresSignature:
           String(formData.get("requiresSignature") ?? "") === "on",
       });
-      return {
-        ok: true as const,
-        message:
-          "Section added. Publish a revision when your checklist edits are ready.",
-      };
+      return dataWithToast(
+        {
+          ok: true as const,
+          intent: "add-section" as const,
+        },
+        {
+          description: "Section added",
+          type: "success",
+        },
+      );
     }
 
     if (intent === "update-section") {
@@ -553,7 +568,24 @@ export default function InspectionsManageDetailPage({
   const [editingSectionId, setEditingSectionId] = useState<string | null>(
     null,
   );
+  const [sectionFormKey, setSectionFormKey] = useState(0);
+  const [questionFormKey, setQuestionFormKey] = useState(0);
   const sections = inspection.sections ?? [];
+
+  const resetSectionForm = useCallback(() => {
+    setSectionFormKey((key) => key + 1);
+  }, []);
+
+  const resetQuestionForm = useCallback(() => {
+    setQuestionFormKey((key) => key + 1);
+    setQuestionType("YES_NO");
+    setRadioOptions("OK\nNeeds attention\nN/A");
+  }, []);
+
+  useManageAddFeedback(actionData, {
+    onAddSection: resetSectionForm,
+    onAddQuestion: resetQuestionForm,
+  });
 
   return (
     <div className="app-shell">
@@ -633,7 +665,7 @@ export default function InspectionsManageDetailPage({
           {actionData && "error" in actionData && actionData.error ? (
             <p className="mt-3 text-sm text-destructive">{actionData.error}</p>
           ) : null}
-          {actionData && "message" in actionData && actionData.message ? (
+          {shouldShowInlineManageMessage(actionData) ? (
             <p className="mt-3 text-sm text-emerald-700">{actionData.message}</p>
           ) : null}
         </div>
@@ -908,7 +940,11 @@ export default function InspectionsManageDetailPage({
                 </CardDescription>
               </CardHeader>
               <CardContent className="grid gap-4">
-                <Form method="post" className="grid gap-4 rounded-lg border border-border/70 bg-background/50 p-4">
+                <Form
+                  key={sectionFormKey}
+                  method="post"
+                  className="grid gap-4 rounded-lg border border-border/70 bg-background/50 p-4"
+                >
                   <input type="hidden" name="intent" value="add-section" />
                   <p className="text-sm font-medium text-brand-navy">
                     Add section
@@ -1010,7 +1046,7 @@ export default function InspectionsManageDetailPage({
                   </div>
                 </div>
               ) : (
-                <Form method="post" className="grid gap-4">
+                <Form key={questionFormKey} method="post" className="grid gap-4">
                   <input type="hidden" name="intent" value="add-question" />
                   <ChecklistQuestionFields
                     kind="inspection"
