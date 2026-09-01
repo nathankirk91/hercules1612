@@ -27,6 +27,7 @@ import { RadioGroup, RadioGroupItem } from "~/components/ui/radio-group";
 import { Textarea } from "~/components/ui/textarea";
 import { SignaturePad, type SignaturePadHandle } from "~/components/signature-pad";
 import { createInspectionFormSchema } from "~/lib/inspection.schema";
+import { syncFormFieldValue } from "~/lib/signature-pad-form";
 import {
   YES_NO_OPTIONS,
   filterQuestionsForContext,
@@ -127,10 +128,22 @@ export function InspectionChecklistForm({
     ]),
   );
 
+  const signaturePadRefs = useRef(new Map<string, SignaturePadHandle | null>());
+  const signatureValuesRef = useRef<Record<string, string>>({});
+
   const [form, fields] = useForm({
     lastResult: lastResult ?? undefined,
     onValidate({ formData }) {
-      return parseWithZod(formData, { schema });
+      const patched = new FormData();
+      for (const [key, value] of formData.entries()) {
+        patched.append(key, value);
+      }
+      for (const [name, value] of Object.entries(signatureValuesRef.current)) {
+        if (value.trim()) {
+          patched.set(name, value);
+        }
+      }
+      return parseWithZod(patched, { schema });
     },
     shouldValidate: "onBlur",
     shouldRevalidate: "onInput",
@@ -152,7 +165,6 @@ export function InspectionChecklistForm({
   const responseFields = fields.responses.getFieldset();
   const sectionSignatureFields = fields.sectionSignatures.getFieldset();
   const actionFields = fields.actions.getFieldList();
-  const signaturePadRefs = useRef(new Map<string, SignaturePadHandle | null>());
   const isPermit = isPermitInspection(definition);
   const formNoun = isPermit ? "permit" : "inspection";
 
@@ -181,8 +193,21 @@ export function InspectionChecklistForm({
   const formProps = getFormProps(form);
 
   function updateSectionSignature(name: string, signature: string) {
+    signatureValuesRef.current[name] = signature;
     form.update({ name, value: signature });
     form.validate({ name });
+  }
+
+  function patchSignatureFields(formElement: HTMLFormElement) {
+    for (const [name, value] of Object.entries(signatureValuesRef.current)) {
+      const field = formElement.elements.namedItem(name);
+      if (
+        field instanceof HTMLInputElement ||
+        field instanceof HTMLTextAreaElement
+      ) {
+        syncFormFieldValue(field, value);
+      }
+    }
   }
 
   function flushSectionSignatures() {
@@ -213,6 +238,7 @@ export function InspectionChecklistForm({
           {...formProps}
           onSubmit={(event) => {
             flushSectionSignatures();
+            patchSignatureFields(event.currentTarget);
             formProps.onSubmit(event);
           }}
         >

@@ -24,6 +24,10 @@ import {
 import { listActiveOperators } from "~/lib/operators.server";
 import { canReviewRuns } from "~/lib/roles";
 import { createInspectionSchema } from "~/lib/inspection.schema";
+import {
+  pickLatestSectionSignature,
+  readSectionSignaturesFromFormData,
+} from "~/lib/signature-pad-form";
 import { parseWithZod } from "@conform-to/zod/v4";
 
 export function meta({}: Route.MetaArgs) {
@@ -114,23 +118,6 @@ export async function action({ request, params }: Route.ActionArgs) {
   );
 
   const formData = await request.formData();
-  const responseMap: Record<string, string> = {};
-  for (const [key, value] of formData.entries()) {
-    const match = /^responses\[(.+)\]$/.exec(key);
-    if (match) {
-      responseMap[match[1]] = String(value);
-    }
-  }
-  const signatureKeys = [...formData.keys()].filter((key) =>
-    key.startsWith("sectionSignatures["),
-  );
-  let signature: string | null = null;
-  for (const key of signatureKeys) {
-    const value = String(formData.get(key) ?? "").trim();
-    if (value) {
-      signature = value;
-    }
-  }
 
   const sectionDefinition = definitionForSection(definition, params.sectionId);
   const schema = createInspectionSchema(sectionDefinition, {
@@ -143,6 +130,10 @@ export async function action({ request, params }: Route.ActionArgs) {
       { status: submission.status === "error" ? 400 : 200 },
     );
   }
+
+  const signature =
+    pickLatestSectionSignature(submission.value.sectionSignatures) ??
+    pickLatestSectionSignature(readSectionSignaturesFromFormData(formData));
 
   try {
     const result = await completeInspectionSection({

@@ -8,7 +8,7 @@ import {
 } from "react";
 
 import { Button } from "~/components/ui/button";
-import { syncHiddenInputValue } from "~/lib/signature-pad-form";
+import { syncFormFieldValue } from "~/lib/signature-pad-form";
 
 type SignaturePadProps = {
   name: string;
@@ -19,7 +19,7 @@ type SignaturePadProps = {
 };
 
 export type SignaturePadHandle = {
-  /** Ensure the latest canvas stroke is written to the hidden input before submit. */
+  /** Ensure the latest canvas stroke is written to the form field before submit. */
   flush: () => string;
 };
 
@@ -47,7 +47,7 @@ function exportSignature(source: HTMLCanvasElement): string {
 export const SignaturePad = forwardRef<SignaturePadHandle, SignaturePadProps>(
   function SignaturePad({ name, id, value, onChange, error }, ref) {
     const canvasRef = useRef<HTMLCanvasElement>(null);
-    const hiddenInputRef = useRef<HTMLInputElement>(null);
+    const fieldRef = useRef<HTMLTextAreaElement>(null);
     const drawingRef = useRef(false);
     const hasStrokesRef = useRef(Boolean(value));
     const dataUrlRef = useRef(value ?? "");
@@ -58,7 +58,7 @@ export const SignaturePad = forwardRef<SignaturePadHandle, SignaturePadProps>(
       (url: string) => {
         dataUrlRef.current = url;
         setDataUrl(url);
-        syncHiddenInputValue(hiddenInputRef.current, url);
+        syncFormFieldValue(fieldRef.current, url);
         onChange?.(url);
       },
       [onChange],
@@ -217,12 +217,15 @@ export const SignaturePad = forwardRef<SignaturePadHandle, SignaturePadProps>(
             </Button>
           ) : null}
         </div>
-        <input
-          ref={hiddenInputRef}
-          type="hidden"
+        <textarea
+          ref={fieldRef}
           name={name}
           id={id}
           defaultValue={value ?? ""}
+          className="sr-only"
+          aria-hidden="true"
+          tabIndex={-1}
+          readOnly
         />
         {error ? <p className="text-sm text-destructive">{error}</p> : null}
       </div>
