@@ -322,4 +322,49 @@ const unitQuestions = filterQuestionsForEquipment(
   assert.deepEqual(parsed.data.actions, ["Follow up on spill kit"]);
 }
 
+{
+  // Conform submits section signatures with dot notation, not bracket syntax.
+  const schema = createInspectionFormSchema({
+    ...FORKLIFT_DAILY_CHECK_TEMPLATE,
+    sections: [
+      {
+        id: "sec-env",
+        title: "Site Environmental",
+        requiresSignature: true,
+        sortOrder: 0,
+      },
+    ],
+    questions: [
+      {
+        id: "q1",
+        label: "Walkabout",
+        sectionId: "sec-env",
+        sectionTitle: "Site Environmental",
+        type: "YES_NO",
+        options: ["Yes", "No"],
+        attentionValues: [],
+        required: true,
+        showLastValue: false,
+        applicableEquipmentRefs: [],
+        applicableShifts: [],
+        firstOfWeekOnly: false,
+        sortOrder: 1,
+      },
+    ],
+  });
+  const dotNotation = new FormData();
+  dotNotation.set("operatorId", "op-1");
+  dotNotation.set("responses.q1", "Yes");
+  dotNotation.set("sectionSignatures.sec-env", "data:image/jpeg;base64,abc");
+  const dotParsed = parseWithZod(dotNotation, { schema });
+  assert.equal(dotParsed.status, "success");
+
+  const bracketNotation = new FormData();
+  bracketNotation.set("operatorId", "op-1");
+  bracketNotation.set("responses.q1", "Yes");
+  bracketNotation.set("sectionSignatures[sec-env]", "data:image/jpeg;base64,abc");
+  const bracketParsed = parseWithZod(bracketNotation, { schema });
+  assert.equal(bracketParsed.status, "error");
+}
+
 console.log("inspection-schema integration tests passed");

@@ -6,6 +6,7 @@ import {
   type SubmissionResult,
 } from "@conform-to/react";
 import { parseWithZod } from "@conform-to/zod/v4";
+import { formatPaths } from "@conform-to/dom";
 import { Form, useNavigation, useSearchParams } from "react-router";
 
 import { Badge } from "~/components/ui/badge";
@@ -140,7 +141,7 @@ export function InspectionChecklistForm({
       sectionSignatures: Object.fromEntries(
         sectionSignatureKeysForDefinition(
           definition,
-          definition.questions,
+          visibleQuestions,
         ).map((key) => [key, ""]),
       ),
       responses: defaultResponses,
@@ -290,6 +291,9 @@ export function InspectionChecklistForm({
               const signatureKey =
                 section.id ?? sectionSignatureKey(section.title);
               const signatureField = sectionSignatureFields[signatureKey];
+              const signatureFieldName =
+                signatureField?.name ??
+                formatPaths(["sectionSignatures", signatureKey]);
               return (
               <section
                 key={section.id ?? section.title ?? `section-${sectionIndex}`}
@@ -525,13 +529,17 @@ export function InspectionChecklistForm({
                       : "Signature / initials"}
                   </Label>
                   <SignaturePad
-                    name={
-                      signatureField?.name ??
-                      `sectionSignatures[${signatureKey}]`
-                    }
+                    name={signatureFieldName}
                     id={signatureField?.id ?? `section-signature-${signatureKey}`}
                     required
                     error={signatureField?.errors?.join(" ")}
+                    onChange={(signature) => {
+                      form.update({
+                        name: signatureFieldName,
+                        value: signature,
+                        validated: false,
+                      });
+                    }}
                   />
                 </div>
                 ) : null}

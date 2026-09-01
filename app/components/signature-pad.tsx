@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { Button } from "~/components/ui/button";
+import { syncHiddenInputValue } from "~/lib/signature-pad-form";
 
 type SignaturePadProps = {
   name: string;
@@ -41,11 +42,22 @@ export function SignaturePad({
   error,
 }: SignaturePadProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const hiddenInputRef = useRef<HTMLInputElement>(null);
   const drawingRef = useRef(false);
   const hasStrokesRef = useRef(Boolean(value));
   const dataUrlRef = useRef(value ?? "");
   const [dataUrl, setDataUrl] = useState(value ?? "");
   const [hasStrokes, setHasStrokes] = useState(Boolean(value));
+
+  const commitSignature = useCallback(
+    (url: string) => {
+      dataUrlRef.current = url;
+      setDataUrl(url);
+      syncHiddenInputValue(hiddenInputRef.current, url);
+      onChange?.(url);
+    },
+    [onChange],
+  );
 
   const paintCanvas = useCallback((imageSrc?: string) => {
     const canvas = canvasRef.current;
@@ -80,6 +92,16 @@ export function SignaturePad({
     return () => window.removeEventListener("resize", onResize);
   }, [paintCanvas]);
 
+  useEffect(() => {
+    if (value == null || value === dataUrlRef.current) {
+      return;
+    }
+    hasStrokesRef.current = Boolean(value);
+    setHasStrokes(Boolean(value));
+    commitSignature(value);
+    paintCanvas(value);
+  }, [commitSignature, paintCanvas, value]);
+
   function getPos(
     event: React.MouseEvent | React.TouchEvent,
   ): { x: number; y: number } | null {
@@ -87,7 +109,7 @@ export function SignaturePad({
     if (!canvas) return null;
     const rect = canvas.getBoundingClientRect();
     if ("touches" in event) {
-      const touch = event.touches[0];
+      const touch = event.changedTouches[0] ?? event.touches[0];
       if (!touch) return null;
       return { x: touch.clientX - rect.left, y: touch.clientY - rect.top };
     }
@@ -95,6 +117,9 @@ export function SignaturePad({
   }
 
   function startDraw(event: React.MouseEvent | React.TouchEvent) {
+    if ("touches" in event) {
+      event.preventDefault();
+    }
     const pos = getPos(event);
     if (!pos) return;
     const canvas = canvasRef.current;
@@ -107,6 +132,9 @@ export function SignaturePad({
 
   function draw(event: React.MouseEvent | React.TouchEvent) {
     if (!drawingRef.current) return;
+    if ("touches" in event) {
+      event.preventDefault();
+    }
     const pos = getPos(event);
     if (!pos) return;
     const canvas = canvasRef.current;
@@ -120,24 +148,22 @@ export function SignaturePad({
     }
   }
 
-  function endDraw() {
+  function endDraw(event?: React.MouseEvent | React.TouchEvent) {
+    if (event && "touches" in event) {
+      event.preventDefault();
+    }
     if (!drawingRef.current) return;
     drawingRef.current = false;
     const canvas = canvasRef.current;
     if (canvas && hasStrokesRef.current) {
-      const url = exportSignature(canvas);
-      dataUrlRef.current = url;
-      setDataUrl(url);
-      onChange?.(url);
+      commitSignature(exportSignature(canvas));
     }
   }
 
   function clear() {
     hasStrokesRef.current = false;
-    dataUrlRef.current = "";
     setHasStrokes(false);
-    setDataUrl("");
-    onChange?.("");
+    commitSignature("");
     paintCanvas("");
   }
 
@@ -154,6 +180,7 @@ export function SignaturePad({
           onTouchStart={startDraw}
           onTouchMove={draw}
           onTouchEnd={endDraw}
+          onTouchCancel={endDraw}
         />
         {!hasStrokes && !dataUrl ? (
           <p className="pointer-events-none absolute inset-0 flex items-center justify-center text-sm text-muted-foreground/60">
@@ -172,10 +199,11 @@ export function SignaturePad({
         ) : null}
       </div>
       <input
+        ref={hiddenInputRef}
         type="hidden"
         name={name}
         id={id}
-        value={dataUrl}
+        defaultValue={value ?? ""}
         required={required}
       />
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
