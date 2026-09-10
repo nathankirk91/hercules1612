@@ -29,6 +29,7 @@ import {
   YES_NO_OPTIONS,
   groupQuestionsBySection,
   parseCheckboxAnswer,
+  resolveInspectionSections,
   serializeCheckboxAnswer,
   type InspectionDefinition,
   type InspectionSummary,
@@ -62,7 +63,10 @@ export function PermitIssueForm({
   const navigation = useNavigation();
   const isSubmitting = navigation.state !== "idle";
   const schema = createPermitIssueFormSchema(definition);
-  const sections = groupQuestionsBySection(definition.questions);
+  const sections = groupQuestionsBySection(
+    definition.questions,
+    resolveInspectionSections(definition),
+  );
   const defaultResponses = Object.fromEntries(
     definition.questions.map((question) => [
       question.id,

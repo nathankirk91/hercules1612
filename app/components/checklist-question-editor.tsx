@@ -93,7 +93,7 @@ export function ChecklistQuestionFields({
         />
       </div>
       <div className="grid gap-2">
-        {kind === "inspection" && sections.length > 0 ? (
+        {sections.length > 0 ? (
           <>
             <Label htmlFor={`sectionId-${defaults?.label ?? "new"}`}>
               Section
@@ -105,12 +105,19 @@ export function ChecklistQuestionFields({
               className="flex h-9 w-full rounded-lg border border-input bg-transparent px-3 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
             >
               <option value="">No section</option>
-              {sections.map((section) => (
-                <option key={section.id} value={section.id}>
-                  {section.title}
-                  {section.requiresSignature ? "" : " (no signature)"}
-                </option>
-              ))}
+              {sections.map((section) => {
+                const showSignatureHint = sections.some(
+                  (item) => item.requiresSignature,
+                );
+                return (
+                  <option key={section.id} value={section.id}>
+                    {section.title}
+                    {showSignatureHint && !section.requiresSignature
+                      ? " (no signature)"
+                      : ""}
+                  </option>
+                );
+              })}
             </select>
             <input type="hidden" name="sectionTitle" value="" />
           </>
@@ -371,7 +378,7 @@ export function ChecklistQuestionEditor({
             radioOptions={radioOptions}
             setRadioOptions={setRadioOptions}
             unitOptions={kind === "inspection" ? unitOptions : []}
-            sections={kind === "inspection" ? sections : []}
+            sections={sections}
             defaults={{
               label: question.label,
               helpText: question.helpText,

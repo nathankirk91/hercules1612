@@ -7,6 +7,7 @@ import {
   ChecklistQuestionEditor,
   ChecklistQuestionFields,
 } from "~/components/checklist-question-editor";
+import { ChecklistSectionsCard } from "~/components/checklist-section-editor";
 import { pageTitle } from "~/lib/brand";
 import { AppHeader } from "~/components/app-header";
 import { Badge } from "~/components/ui/badge";
@@ -37,11 +38,15 @@ import {
 } from "~/lib/inspections";
 import {
   addInspectionQuestion,
+  addInspectionSection,
   getManagedInspection,
   moveInspectionQuestion,
+  moveInspectionSection,
   publishInspectionVersion,
   removeInspectionQuestion,
+  removeInspectionSection,
   updateInspectionQuestion,
+  updateInspectionSection,
   updateManagedInspection,
   type InspectionVersionHistoryItem,
 } from "~/lib/inspections.server";
@@ -183,6 +188,72 @@ export async function action({ request, params }: Route.ActionArgs) {
           "Question order updated. Publish a revision when your checklist edits are ready.",
       };
     }
+
+    if (intent === "add-section") {
+      await addInspectionSection({
+        inspectionId,
+        title: String(formData.get("title") ?? ""),
+        requiresSignature:
+          String(formData.get("requiresSignature") ?? "") === "on",
+      });
+      return dataWithToast(
+        {
+          ok: true as const,
+          intent: "add-section" as const,
+        },
+        {
+          description: "Section added",
+          type: "success",
+        },
+      );
+    }
+
+    if (intent === "update-section") {
+      const sectionId = String(formData.get("sectionId") ?? "");
+      if (!sectionId) {
+        return data({ error: "Missing section." }, { status: 400 });
+      }
+      await updateInspectionSection({
+        sectionId,
+        title: String(formData.get("title") ?? ""),
+        requiresSignature:
+          String(formData.get("requiresSignature") ?? "") === "on",
+        skipWhenQuestionId: String(formData.get("skipWhenQuestionId") ?? ""),
+        skipWhenEquals: String(formData.get("skipWhenEquals") ?? ""),
+      });
+      return {
+        ok: true as const,
+        message:
+          "Section updated. Publish a revision when your checklist edits are ready.",
+      };
+    }
+
+    if (intent === "remove-section") {
+      const sectionId = String(formData.get("sectionId") ?? "");
+      if (!sectionId) {
+        return data({ error: "Missing section." }, { status: 400 });
+      }
+      await removeInspectionSection({ sectionId });
+      return {
+        ok: true as const,
+        message:
+          "Section removed. Publish a revision when your checklist edits are ready.",
+      };
+    }
+
+    if (intent === "move-section") {
+      const sectionId = String(formData.get("sectionId") ?? "");
+      const direction = String(formData.get("direction") ?? "");
+      if (!sectionId || (direction !== "up" && direction !== "down")) {
+        return data({ error: "Invalid move request." }, { status: 400 });
+      }
+      await moveInspectionSection({ sectionId, direction });
+      return {
+        ok: true as const,
+        message:
+          "Section order updated. Publish a revision when your checklist edits are ready.",
+      };
+    }
   } catch (error) {
     return data(
       {
@@ -293,7 +364,16 @@ export default function PermitsManageDetailPage({
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(
     null,
   );
+  const [editingSectionId, setEditingSectionId] = useState<string | null>(
+    null,
+  );
+  const [sectionFormKey, setSectionFormKey] = useState(0);
   const [questionFormKey, setQuestionFormKey] = useState(0);
+  const sections = inspection.sections ?? [];
+
+  const resetSectionForm = useCallback(() => {
+    setSectionFormKey((key) => key + 1);
+  }, []);
 
   const resetQuestionForm = useCallback(() => {
     setQuestionFormKey((key) => key + 1);
@@ -302,6 +382,7 @@ export default function PermitsManageDetailPage({
   }, []);
 
   useManageAddFeedback(actionData, {
+    onAddSection: resetSectionForm,
     onAddQuestion: resetQuestionForm,
   });
 
@@ -414,6 +495,18 @@ export default function PermitsManageDetailPage({
             </CardContent>
           </Card>
 
+          <ChecklistSectionsCard
+            sections={sections}
+            questions={inspection.questions}
+            sectionFormKey={sectionFormKey}
+            editingSectionId={editingSectionId}
+            onEditSection={setEditingSectionId}
+            onCancelEdit={() => setEditingSectionId(null)}
+            showSignatureOption={false}
+            showSkipRules={false}
+            description="Define checklist sections here first, then assign each question to a section below."
+          />
+
           <Card>
             <CardHeader>
               <CardTitle>Add question</CardTitle>
@@ -435,6 +528,7 @@ export default function PermitsManageDetailPage({
                   setQuestionType={setQuestionType}
                   radioOptions={radioOptions}
                   setRadioOptions={setRadioOptions}
+                  sections={sections}
                 />
                 <div>
                   <Button type="submit">Add question</Button>
@@ -470,6 +564,7 @@ export default function PermitsManageDetailPage({
                       isEditing={editingQuestionId === question.id}
                       onEdit={() => setEditingQuestionId(question.id)}
                       onCancel={() => setEditingQuestionId(null)}
+                      sections={sections}
                     />
                   ))}
                 </ul>
