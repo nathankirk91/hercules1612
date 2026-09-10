@@ -244,6 +244,8 @@ model Inspection {
   equipmentLabel       String?  @map("equipment_label")
   /// For permit forms: how many distinct authorisation signatures open the permit (2 or 3).
   requiredSignerCount  Int?     @map("required_signer_count")
+  /// For permit forms: optional two-letter uppercase prefix on newly issued numbers (e.g. SW → SW2608001).
+  permitNumberPrefix   String?  @map("permit_number_prefix") @db.VarChar(2)
   /// When set, this form inherits questions from the template inspection.
   templateInspectionId String?  @map("template_inspection_id")
   template             Inspection?  @relation("InspectionTemplate", fields: [templateInspectionId], references: [id], onDelete: Restrict)

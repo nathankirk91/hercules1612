@@ -141,6 +141,7 @@ async function ensureInspectionSchemaOnce(): Promise<void> {
     )`,
     `ALTER TABLE "inspections" ADD COLUMN IF NOT EXISTS "equipment_label" TEXT`,
     `ALTER TABLE "inspections" ADD COLUMN IF NOT EXISTS "required_signer_count" INTEGER`,
+    `ALTER TABLE "inspections" ADD COLUMN IF NOT EXISTS "permit_number_prefix" VARCHAR(2)`,
     `ALTER TABLE "inspections" ADD COLUMN IF NOT EXISTS "template_inspection_id" TEXT`,
     `ALTER TABLE "inspections" ADD COLUMN IF NOT EXISTS "fixed_equipment_ref" TEXT`,
     `ALTER TABLE "inspections" ADD COLUMN IF NOT EXISTS "is_master_template" BOOLEAN NOT NULL DEFAULT false`,

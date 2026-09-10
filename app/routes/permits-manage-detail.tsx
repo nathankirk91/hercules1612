@@ -103,6 +103,7 @@ export async function action({ request, params }: Route.ActionArgs) {
         equipmentLabel: existing.equipmentLabel ?? "",
         isAvailable: String(formData.get("isAvailable") ?? "") === "on",
         requiredSignerCount: Number(formData.get("requiredSignerCount") ?? 2),
+        permitNumberPrefix: String(formData.get("permitNumberPrefix") ?? ""),
       });
       return { ok: true as const, message: "Details saved." };
     }
@@ -477,6 +478,27 @@ export default function PermitsManageDetailPage({
                   <p className="text-xs text-muted-foreground">
                     Who may sign each slot is set under Permits → Settings. The
                     same person still cannot sign more than one role.
+                  </p>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="permitNumberPrefix">
+                    Permit number prefix
+                  </Label>
+                  <Input
+                    id="permitNumberPrefix"
+                    name="permitNumberPrefix"
+                    defaultValue={inspection.permitNumberPrefix ?? ""}
+                    maxLength={2}
+                    placeholder="e.g. SW"
+                    autoComplete="off"
+                    className="uppercase sm:max-w-[6rem]"
+                    pattern="[A-Za-z]{2}"
+                    title="Exactly two letters (A–Z)"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Two capital letters placed before new permit numbers (for
+                    example SW2608001). Leave blank for numbers with no prefix.
+                    Changing this does not rewrite permits already issued.
                   </p>
                 </div>
                 <label className="flex items-center gap-2 text-sm">

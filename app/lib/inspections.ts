@@ -167,6 +167,12 @@ export type InspectionDefinition = {
    * permit opens (typically 2 for Safe Work, 3 for Hot Work).
    */
   requiredSignerCount?: number | null;
+  /**
+   * Permit forms only: optional two-letter uppercase prefix applied to newly
+   * issued permit numbers (e.g. "SW" → SW2608001). Changing this does not
+   * rewrite numbers already issued.
+   */
+  permitNumberPrefix?: string | null;
   /** When set, operators pick a unit from this list instead of free text. */
   equipmentChoices?: Array<{ value: string; label: string }>;
   /**
