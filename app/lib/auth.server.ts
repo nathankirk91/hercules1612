@@ -5,6 +5,7 @@ import { FormStrategy } from "remix-auth-form";
 import {
   commitSession,
   getSession,
+  SESSION_TOUCHED_AT_KEY,
   sessionStorage,
 } from "~/lib/session.server";
 import {
@@ -122,6 +123,7 @@ export async function createUserSession(request: Request, user: AuthUser) {
   const returnTo = (session.get("returnTo") as string | undefined) ?? "/";
   session.unset("returnTo");
   session.set("user", user);
+  session.set(SESSION_TOUCHED_AT_KEY, Date.now());
 
   return redirect(returnTo, {
     headers: {

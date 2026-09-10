@@ -46,7 +46,7 @@ Prisma Client is generated to `generated/prisma` (gitignored) via `postinstall` 
 
 - `/login` — email/password form
 - `/logout` — clears the session cookie
-- Session cookie (`__solenis_session`) lasts **30 days** (signed cookie; no access/refresh tokens)
+- Session cookie (`__solenis_session`) lasts **7 days**, sliding: daily use extends it another 7 days (rewrites the cookie at most once per day; no access/refresh tokens)
 - Home and calculator routes require a signed-in user
 - `/approvals` — approvers and admin review pending runs
 - `/history` — calculation submission history and approval status

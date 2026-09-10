@@ -14,6 +14,7 @@ import { Button } from "~/components/ui/button";
 import { Toaster } from "~/components/ui/sonner";
 import { APP_NAME } from "~/lib/brand";
 import { combineHeaders } from "~/lib/headers";
+import { maybeExtendSession } from "~/lib/session.server";
 import { getToast } from "~/lib/toast.server";
 import type { Route } from "./+types/root";
 import "./app.css";
@@ -38,8 +39,14 @@ export const links: Route.LinksFunction = () => [
 ];
 
 export async function loader({ request }: Route.LoaderArgs) {
-  const { toast, headers: toastHeaders } = await getToast(request);
-  return data({ toast }, { headers: combineHeaders(toastHeaders) });
+  const [sessionHeaders, { toast, headers: toastHeaders }] = await Promise.all([
+    maybeExtendSession(request),
+    getToast(request),
+  ]);
+  return data(
+    { toast },
+    { headers: combineHeaders(toastHeaders, sessionHeaders) },
+  );
 }
 
 export function Layout({ children }: { children: React.ReactNode }) {
