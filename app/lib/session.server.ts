@@ -1,5 +1,8 @@
 import { createCookieSessionStorage } from "react-router";
 
+/** Keep users signed in across browser restarts (30 days). */
+export const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 30;
+
 function getSessionSecrets(): string[] {
   const secret = process.env.SESSION_SECRET;
   if (secret) {
@@ -23,6 +26,7 @@ export const sessionStorage = createCookieSessionStorage({
     sameSite: "lax",
     secrets: getSessionSecrets(),
     secure: process.env.NODE_ENV === "production",
+    maxAge: SESSION_MAX_AGE_SECONDS,
   },
 });
 
