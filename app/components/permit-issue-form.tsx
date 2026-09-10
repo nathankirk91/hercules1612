@@ -132,11 +132,6 @@ export function PermitIssueForm({
                 </p>
               </section>
             ) : null}
-            {definition.instructionNotes ? (
-              <section className="rounded-lg border border-border/70 bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
-                {definition.instructionNotes}
-              </section>
-            ) : null}
 
             {definition.equipmentLabel ? (
               <section className="grid gap-2">
