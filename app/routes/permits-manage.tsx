@@ -77,6 +77,7 @@ export async function action({ request }: Route.ActionArgs) {
         title: String(formData.get("title") ?? ""),
         description: String(formData.get("description") ?? ""),
         requiredSignerCount: Number(formData.get("requiredSignerCount") ?? 2),
+        permitNumberPrefix: String(formData.get("permitNumberPrefix") ?? ""),
       });
       throw redirect(`/permits/manage/${created.id}`);
     }
@@ -210,6 +211,25 @@ export default function PermitsManagePage({
                     <option value="2">2 different people</option>
                     <option value="3">All 3 authorisation slots</option>
                   </select>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="permitNumberPrefix">
+                    Permit number prefix
+                  </Label>
+                  <Input
+                    id="permitNumberPrefix"
+                    name="permitNumberPrefix"
+                    maxLength={2}
+                    placeholder="e.g. SW"
+                    autoComplete="off"
+                    className="uppercase sm:max-w-[6rem]"
+                    pattern="[A-Za-z]{2}"
+                    title="Exactly two letters (A–Z), or leave blank"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Optional. Two letters at the start of new permit numbers
+                    (e.g. SW2608001).
+                  </p>
                 </div>
                 <div>
                   <Button type="submit">Create permit form</Button>

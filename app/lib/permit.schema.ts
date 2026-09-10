@@ -136,11 +136,33 @@ export type AuthorizedPerson = {
   signature: string;
 };
 
+/** Normalize a permit number prefix to exactly two uppercase A–Z letters, or empty. */
+export function normalizePermitNumberPrefix(
+  value: string | null | undefined,
+): string {
+  const trimmed = String(value ?? "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, "");
+  if (!trimmed) {
+    return "";
+  }
+  if (!/^[A-Z]{2}$/.test(trimmed)) {
+    throw new Error(
+      "Permit number prefix must be exactly two letters (A–Z), with no digits.",
+    );
+  }
+  return trimmed;
+}
+
 export function formatPermitNumber(
   yearMonth: string,
   sequence: number,
+  prefix: string | null | undefined = "",
 ): string {
-  return `${yearMonth}${String(sequence).padStart(3, "0")}`;
+  const normalizedPrefix = normalizePermitNumberPrefix(prefix);
+  const body = `${yearMonth}${String(sequence).padStart(3, "0")}`;
+  return normalizedPrefix ? `${normalizedPrefix}${body}` : body;
 }
 
 export function parseAuthorizedPersonnel(value: unknown): AuthorizedPerson[] {

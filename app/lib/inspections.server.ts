@@ -41,6 +41,7 @@ import {
   parseSectionOrder,
   parseWorkflowMode,
 } from "~/lib/inspection-workflow";
+import { normalizePermitNumberPrefix } from "~/lib/permit.schema";
 
 function clampRequiredSignerCount(value: unknown): number {
   const n = typeof value === "number" ? value : Number(value);
@@ -98,6 +99,7 @@ export type ManagedInspection = {
   href: string;
   equipmentLabel: string | null;
   requiredSignerCount: number | null;
+  permitNumberPrefix: string | null;
   templateInspectionId: string | null;
   fixedEquipmentRef: string | null;
   isMasterTemplate: boolean;
@@ -311,6 +313,7 @@ function mapDefinition(row: {
   href: string;
   equipmentLabel: string | null;
   requiredSignerCount?: number | null;
+  permitNumberPrefix?: string | null;
   templateInspectionId?: string | null;
   fixedEquipmentRef?: string | null;
   isAvailable: boolean;
@@ -354,6 +357,7 @@ function mapDefinition(row: {
     href: row.href,
     equipmentLabel: row.equipmentLabel,
     requiredSignerCount: row.requiredSignerCount ?? null,
+    permitNumberPrefix: row.permitNumberPrefix ?? null,
     templateInspectionId: row.templateInspectionId ?? null,
     fixedEquipmentRef: row.fixedEquipmentRef ?? null,
     isAvailable: row.isAvailable,
@@ -570,6 +574,10 @@ function mergeStaticDefinitionMeta(
       definition.requiredSignerCount ??
       fallback?.requiredSignerCount ??
       null,
+    permitNumberPrefix:
+      definition.permitNumberPrefix ??
+      fallback?.permitNumberPrefix ??
+      null,
     equipmentChoices:
       fallback?.equipmentChoices ?? definition.equipmentChoices,
     fixedEquipmentRef:
@@ -652,6 +660,7 @@ async function listManagedInspectionsOnce(): Promise<ManagedInspection[]> {
       href: row.href,
       equipmentLabel: row.equipmentLabel,
       requiredSignerCount: row.requiredSignerCount ?? null,
+      permitNumberPrefix: row.permitNumberPrefix ?? null,
       templateInspectionId: row.templateInspectionId,
       fixedEquipmentRef: row.fixedEquipmentRef,
       isMasterTemplate,
@@ -1367,6 +1376,7 @@ export async function createManagedInspection(args: {
   category?: string;
   equipmentLabel?: string;
   requiredSignerCount?: number | null;
+  permitNumberPrefix?: string | null;
   isMasterTemplate?: boolean;
   templateInspectionId?: string | null;
   fixedEquipmentRef?: string | null;
@@ -1442,6 +1452,9 @@ export async function createManagedInspection(args: {
   const requiredSignerCount = isPermit
     ? clampRequiredSignerCount(args.requiredSignerCount ?? 2)
     : null;
+  const permitNumberPrefix = isPermit
+    ? normalizePermitNumberPrefix(args.permitNumberPrefix) || null
+    : null;
 
   const equipmentLabel =
     args.equipmentLabel?.trim() ||
@@ -1461,6 +1474,7 @@ export async function createManagedInspection(args: {
       href: isPermit ? `/permits/${slug}` : `/inspections/${slug}`,
       equipmentLabel,
       requiredSignerCount,
+      permitNumberPrefix,
       templateInspectionId,
       fixedEquipmentRef: args.fixedEquipmentRef?.trim() || null,
       isMasterTemplate,
@@ -1483,6 +1497,7 @@ export async function createManagedInspection(args: {
     href: row.href,
     equipmentLabel: row.equipmentLabel,
     requiredSignerCount: row.requiredSignerCount ?? null,
+    permitNumberPrefix: row.permitNumberPrefix ?? null,
     templateInspectionId: row.templateInspectionId,
     fixedEquipmentRef: row.fixedEquipmentRef,
     isMasterTemplate: row.isMasterTemplate,
@@ -1502,6 +1517,7 @@ export async function updateManagedInspection(args: {
   equipmentLabel: string;
   isAvailable: boolean;
   requiredSignerCount?: number | null;
+  permitNumberPrefix?: string | null;
   isMasterTemplate?: boolean;
   workflowMode?: string;
   dayRecordPolicy?: string;
@@ -1535,6 +1551,9 @@ export async function updateManagedInspection(args: {
   const requiredSignerCount = isPermit
     ? clampRequiredSignerCount(args.requiredSignerCount ?? 2)
     : null;
+  const permitNumberPrefix = isPermit
+    ? normalizePermitNumberPrefix(args.permitNumberPrefix) || null
+    : null;
 
   if (existing.templateInspectionId && args.isMasterTemplate) {
     throw new Error(
@@ -1561,6 +1580,7 @@ export async function updateManagedInspection(args: {
         : `/inspections/${existing.slug}`,
       equipmentLabel: args.equipmentLabel.trim() || null,
       requiredSignerCount,
+      permitNumberPrefix,
       isAvailable: args.isAvailable,
       workflowMode: parseWorkflowMode(args.workflowMode),
       dayRecordPolicy: parseDayRecordPolicy(args.dayRecordPolicy),

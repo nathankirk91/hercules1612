@@ -167,6 +167,12 @@ export type InspectionDefinition = {
    * permit opens (typically 2 for Safe Work, 3 for Hot Work).
    */
   requiredSignerCount?: number | null;
+  /**
+   * Permit forms only: optional two-letter uppercase prefix applied to newly
+   * issued permit numbers (e.g. "SW" → SW2608001). Changing this does not
+   * rewrite numbers already issued.
+   */
+  permitNumberPrefix?: string | null;
   /** When set, operators pick a unit from this list instead of free text. */
   equipmentChoices?: Array<{ value: string; label: string }>;
   /**
@@ -993,8 +999,6 @@ export const SAFE_WORK_PERMIT: InspectionDefinition = {
   sortOrder: 20,
   equipmentLabel: "Equipment number",
   requiredSignerCount: 2,
-  instructionNotes:
-    "Form 42801 (09/14). Safe Work Permits authorise technicians, contractors, and visitors for non-routine work in process areas. SWP does not replace Hot Work, Confined Space Entry, or Line Break permits — complete those separately when required. Duration is calculated from start and end time and cannot exceed 12 hours if conditions and personnel do not change. Approvers must visually inspect the job site before signing. Two different people must sign before the permit opens; the same person cannot sign more than one role. A third signature can still be added after the permit is open. Close out with date, time, and operator/maintenance initials when work is finished. Retain closed permits for at least one year.",
   isAvailable: true,
   questions: [
     dateQuestion(

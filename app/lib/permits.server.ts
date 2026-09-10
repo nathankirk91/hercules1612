@@ -34,6 +34,7 @@ import {
   formatPermitNumber,
   isPermitAuthSlotSigned,
   isPermitReadyToOpen,
+  normalizePermitNumberPrefix,
   normalizeRequiredSignerCount,
   parseAuthorizedPersonnel,
   PERMIT_AUTH_SLOT_KEYS,
@@ -150,6 +151,7 @@ export async function createManagedPermit(args: {
   description?: string;
   equipmentLabel?: string;
   requiredSignerCount?: number;
+  permitNumberPrefix?: string | null;
 }): Promise<ManagedInspection> {
   const created = await createManagedInspection({
     title: args.title,
@@ -157,16 +159,21 @@ export async function createManagedPermit(args: {
     category: PERMIT_CATEGORY,
     equipmentLabel: args.equipmentLabel,
     requiredSignerCount: args.requiredSignerCount ?? 2,
+    permitNumberPrefix: args.permitNumberPrefix,
   });
 
   const prisma = getPrisma();
   if (prisma) {
+    const permitNumberPrefix = normalizePermitNumberPrefix(
+      args.permitNumberPrefix,
+    );
     await prisma.inspection.update({
       where: { id: created.id },
       data: {
         category: PERMIT_CATEGORY,
         href: `/permits/${created.slug}`,
         requiredSignerCount: args.requiredSignerCount ?? 2,
+        permitNumberPrefix: permitNumberPrefix || null,
       },
     });
   }
@@ -176,6 +183,8 @@ export async function createManagedPermit(args: {
     category: PERMIT_CATEGORY,
     href: `/permits/${created.slug}`,
     requiredSignerCount: args.requiredSignerCount ?? 2,
+    permitNumberPrefix:
+      normalizePermitNumberPrefix(args.permitNumberPrefix) || null,
   };
 }
 
@@ -219,6 +228,7 @@ export async function duplicateManagedPermit(args: {
     description: source.description,
     equipmentLabel: source.equipmentLabel ?? undefined,
     requiredSignerCount: source.requiredSignerCount ?? 2,
+    permitNumberPrefix: source.permitNumberPrefix,
   });
 
   for (const question of [...questions].sort(
@@ -288,6 +298,7 @@ export async function createPermitRun(args: {
       id: true,
       version: true,
       category: true,
+      permitNumberPrefix: true,
       templateInspectionId: true,
       template: { select: { version: true } },
     },
@@ -301,7 +312,10 @@ export async function createPermitRun(args: {
       ? (inspection.template?.version ?? inspection.version)
       : inspection.version;
 
-  const permitNumber = await allocateNextPermitNumber();
+  const permitNumber = await allocateNextPermitNumber(
+    new Date(),
+    inspection.permitNumberPrefix,
+  );
 
   const row = await prisma.permitRun.create({
     data: {
@@ -330,6 +344,7 @@ export async function createPermitRun(args: {
 /** Shared YYMMXXX sequence for all permit types (Safe Work, Hot Work, Line Break). */
 export async function allocateNextPermitNumber(
   date: Date = new Date(),
+  prefix: string | null | undefined = "",
 ): Promise<string> {
   const prisma = getPrisma();
   if (!prisma) {
@@ -349,7 +364,7 @@ export async function allocateNextPermitNumber(
   if (!sequence || sequence < 1) {
     throw new Error("Could not allocate a permit number.");
   }
-  return formatPermitNumber(yearMonth, sequence);
+  return formatPermitNumber(yearMonth, sequence, prefix);
 }
 
 export async function listOpenPermitRuns(args?: {

@@ -24,6 +24,8 @@ const { parseChecklistQuestionFormData, SAFE_WORK_PERMIT } = await import(
   const permit = parseChecklistQuestionFormData(formData, "permit");
   assert.ok(!("error" in permit));
   assert.equal(permit.label, "Area clear?");
+  assert.equal(permit.sectionTitle, "Site");
+  assert.equal(permit.sectionId, "");
   assert.deepEqual(permit.applicableShifts, []);
   assert.deepEqual(permit.applicableEquipmentRefs, []);
   assert.equal(permit.firstOfWeekOnly, false);
@@ -31,6 +33,24 @@ const { parseChecklistQuestionFormData, SAFE_WORK_PERMIT } = await import(
   assert.deepEqual(permit.attentionValues, []);
   assert.equal(permit.required, true);
   assert.equal(permit.showLastValue, false);
+}
+
+{
+  const formData = new FormData();
+  formData.set("label", "Hot work area?");
+  formData.set("helpText", "");
+  formData.set("sectionId", "sec_permit_details");
+  formData.set("sectionTitle", "");
+  formData.set("type", "TEXT");
+  formData.set("options", "");
+  formData.set("permitFieldRole", "area");
+
+  const permit = parseChecklistQuestionFormData(formData, "permit");
+  assert.ok(!("error" in permit));
+  assert.equal(permit.sectionId, "sec_permit_details");
+  assert.equal(permit.sectionTitle, "");
+  assert.equal(permit.permitFieldRole, "area");
+  assert.equal(permit.required, true);
 }
 
 {

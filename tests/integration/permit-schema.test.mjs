@@ -55,10 +55,27 @@ function fillRequired(definition, overrides = {}) {
 {
   assert.equal(formatPermitNumber("2608", 2), "2608002");
   assert.equal(formatPermitNumber("2608", 12), "2608012");
+  assert.equal(formatPermitNumber("2608", 2, "SW"), "SW2608002");
+  assert.equal(formatPermitNumber("2608", 2, "sw"), "SW2608002");
+  assert.equal(formatPermitNumber("2608", 2, ""), "2608002");
+  assert.equal(formatPermitNumber("2608", 2, null), "2608002");
   assert.equal(
     melbournePermitYearMonth(new Date("2026-08-02T14:00:00.000Z")),
     "2608",
   );
+}
+
+{
+  const { normalizePermitNumberPrefix } = await import(
+    "../../app/lib/permit.schema.ts"
+  );
+  assert.equal(normalizePermitNumberPrefix("sw"), "SW");
+  assert.equal(normalizePermitNumberPrefix("  HW "), "HW");
+  assert.equal(normalizePermitNumberPrefix(""), "");
+  assert.equal(normalizePermitNumberPrefix(null), "");
+  assert.throws(() => normalizePermitNumberPrefix("S"), /two letters/);
+  assert.throws(() => normalizePermitNumberPrefix("S1"), /two letters/);
+  assert.throws(() => normalizePermitNumberPrefix("SWP"), /two letters/);
 }
 
 {
