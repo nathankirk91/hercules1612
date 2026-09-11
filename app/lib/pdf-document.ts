@@ -32,12 +32,44 @@ const FLAGGED = rgb(0.55, 0.31, 0.04);
 const WHITE = rgb(1, 1, 1);
 const BODY = rgb(0.08, 0.12, 0.16);
 
-const HEADER_HEIGHT = 36;
+const HEADER_HEIGHT = 44;
 const SIGNATURE_MAX_WIDTH = 180;
 const SIGNATURE_MAX_HEIGHT = 52;
 const ROW_GAP = 8;
 const SECTION_GAP = 14;
 const LINE_HEIGHT = 12;
+
+/** Fit text to a max width by trimming with an ellipsis when needed. */
+function fitTextToWidth(
+  font: PDFFont,
+  text: string,
+  size: number,
+  maxWidth: number,
+): string {
+  const value = toWinAnsi(text).trim();
+  if (!value) {
+    return "";
+  }
+  if (font.widthOfTextAtSize(value, size) <= maxWidth) {
+    return value;
+  }
+  const ellipsis = "...";
+  let low = 0;
+  let high = value.length;
+  while (low < high) {
+    const mid = Math.ceil((low + high) / 2);
+    const candidate = `${value.slice(0, mid).trimEnd()}${ellipsis}`;
+    if (font.widthOfTextAtSize(candidate, size) <= maxWidth) {
+      low = mid;
+    } else {
+      high = mid - 1;
+    }
+  }
+  if (low <= 0) {
+    return ellipsis;
+  }
+  return `${value.slice(0, low).trimEnd()}${ellipsis}`;
+}
 
 function toWinAnsi(value: string): string {
   return value
@@ -156,21 +188,67 @@ class PdfLayout {
     });
     this.page.drawText(toWinAnsi(this.document.siteName.toUpperCase()), {
       x: MARGIN_X,
-      y: PAGE_HEIGHT - 23,
+      y: PAGE_HEIGHT - 20,
       size: 10,
       font: this.bold,
       color: WHITE,
     });
-    const kindLabel =
-      this.document.kind === "permit" ? "WORK PERMIT" : "INSPECTION RECORD";
-    const kindWidth = this.bold.widthOfTextAtSize(kindLabel, 9);
-    this.page.drawText(kindLabel, {
-      x: PAGE_WIDTH - MARGIN_X - kindWidth,
-      y: PAGE_HEIGHT - 23,
-      size: 9,
-      font: this.bold,
-      color: WHITE,
-    });
+
+    // Right side: permit name + ID, or generic inspection label.
+    const siteWidth = this.bold.widthOfTextAtSize(
+      toWinAnsi(this.document.siteName.toUpperCase()),
+      10,
+    );
+    const maxRightWidth = Math.max(
+      80,
+      PAGE_WIDTH - MARGIN_X * 2 - siteWidth - 24,
+    );
+    if (this.document.kind === "permit") {
+      const permitName = fitTextToWidth(
+        this.bold,
+        this.document.title.toUpperCase(),
+        9,
+        maxRightWidth,
+      );
+      const permitId = this.document.subtitle?.trim()
+        ? fitTextToWidth(
+            this.bold,
+            this.document.subtitle.trim(),
+            9,
+            maxRightWidth,
+          )
+        : "";
+      if (permitName) {
+        const nameWidth = this.bold.widthOfTextAtSize(permitName, 9);
+        this.page.drawText(permitName, {
+          x: PAGE_WIDTH - MARGIN_X - nameWidth,
+          y: PAGE_HEIGHT - (permitId ? 16 : 20),
+          size: 9,
+          font: this.bold,
+          color: WHITE,
+        });
+      }
+      if (permitId) {
+        const idWidth = this.bold.widthOfTextAtSize(permitId, 9);
+        this.page.drawText(permitId, {
+          x: PAGE_WIDTH - MARGIN_X - idWidth,
+          y: PAGE_HEIGHT - 30,
+          size: 9,
+          font: this.bold,
+          color: WHITE,
+        });
+      }
+    } else {
+      const kindLabel = "INSPECTION RECORD";
+      const kindWidth = this.bold.widthOfTextAtSize(kindLabel, 9);
+      this.page.drawText(kindLabel, {
+        x: PAGE_WIDTH - MARGIN_X - kindWidth,
+        y: PAGE_HEIGHT - 20,
+        size: 9,
+        font: this.bold,
+        color: WHITE,
+      });
+    }
     this.y = PAGE_HEIGHT - HEADER_HEIGHT - 28;
   }
 

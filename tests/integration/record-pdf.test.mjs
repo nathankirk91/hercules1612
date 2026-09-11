@@ -480,6 +480,8 @@ assert.equal(buildRecordFilename(["", null]), "record.pdf");
   const bytes = await renderRecordPdf(doc);
   const text = pdfReadableText(bytes);
   assert.equal(Buffer.from(bytes).toString("latin1").startsWith("%PDF"), true);
+  assert.match(text, /SAFE WORK PERMIT/);
+  assert.match(text, /#2608002/);
   assert.match(text, /Safe Work Permit/);
   assert.match(text, /2608002/);
   assert.match(text, /Work to be performed/);
@@ -490,6 +492,11 @@ assert.equal(buildRecordFilename(["", null]), "record.pdf");
   assert.match(text, /Operators initials/);
   assert.match(text, /Maintenance initials/);
   assert.match(text, /\/Subtype\s*\/Image/);
+  assert.doesNotMatch(
+    text,
+    /(?<!SAFE )WORK PERMIT/,
+    "PDF header should use the permit name, not the generic WORK PERMIT label",
+  );
 
   for (const question of SAFE_WORK_PERMIT.questions) {
     const snippet = question.label.slice(0, 24);
