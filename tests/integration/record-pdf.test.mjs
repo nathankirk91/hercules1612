@@ -480,6 +480,8 @@ assert.equal(buildRecordFilename(["", null]), "record.pdf");
   const bytes = await renderRecordPdf(doc);
   const text = pdfReadableText(bytes);
   assert.equal(Buffer.from(bytes).toString("latin1").startsWith("%PDF"), true);
+  assert.match(text, /SAFE WORK PERMIT/);
+  assert.match(text, /#2608002/);
   assert.match(text, /Safe Work Permit/);
   assert.match(text, /2608002/);
   assert.match(text, /Work to be performed/);
