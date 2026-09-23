@@ -30,7 +30,8 @@ export async function loader({ request }: Route.LoaderArgs) {
   const status =
     statusParam === "OPEN" ||
     statusParam === "CLOSED" ||
-    statusParam === "PENDING_AUTHORIZATION"
+    statusParam === "PENDING_AUTHORIZATION" ||
+    statusParam === "ARCHIVED"
       ? statusParam
       : "ALL";
   const [runs, pendingCount] = await Promise.all([
@@ -77,10 +78,11 @@ export default function PermitsHistoryPage({
               defaultValue={status}
               className="flex h-9 rounded-lg border border-input bg-transparent px-3 py-1 text-sm"
             >
-              <option value="ALL">All</option>
+              <option value="ALL">All active</option>
               <option value="PENDING_AUTHORIZATION">Pending authorization</option>
               <option value="OPEN">Open</option>
               <option value="CLOSED">Closed</option>
+              <option value="ARCHIVED">Archived</option>
             </select>
           </div>
           <Button type="submit" variant="secondary" size="sm">

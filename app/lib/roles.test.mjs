@@ -11,6 +11,7 @@ const {
   canManageUsers,
   canManageRoles,
   canHardDeleteInspections,
+  canArchiveRuns,
   HSOLENIS_OPERATOR_ROLE_SLUG,
   accessLevelLabel,
   isAccessLevelRole,
@@ -51,6 +52,10 @@ assert.equal(canManageRoles("ADMIN"), true);
 assert.equal(canHardDeleteInspections("STANDARD"), false);
 assert.equal(canHardDeleteInspections("APPROVER"), false);
 assert.equal(canHardDeleteInspections("ADMIN"), true);
+
+assert.equal(canArchiveRuns("STANDARD"), false);
+assert.equal(canArchiveRuns("APPROVER"), true);
+assert.equal(canArchiveRuns("ADMIN"), true);
 
 assert.equal(HSOLENIS_OPERATOR_ROLE_SLUG, "hsolenis-operator");
 

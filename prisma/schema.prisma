@@ -107,10 +107,12 @@ model User {
   operatorInspectionRuns     InspectionRun[]   @relation("InspectionOperator")
   startedInspectionRuns      InspectionRun[]   @relation("InspectionRunStartedBy")
   voidedInspectionRuns       InspectionRun[]   @relation("InspectionRunVoidedBy")
+  archivedInspectionRuns     InspectionRun[]   @relation("InspectionRunArchivedBy")
   completedRunSections       InspectionRunSection[] @relation("InspectionRunSectionCompletedBy")
   operatorRunSections        InspectionRunSection[] @relation("InspectionRunSectionOperator")
   submittedPermitRuns        PermitRun[]       @relation("PermitSubmittedBy")
   closedPermitRuns           PermitRun[]       @relation("PermitClosedBy")
+  archivedPermitRuns         PermitRun[]       @relation("PermitArchivedBy")
   inspectionVersions         InspectionVersion[] @relation("InspectionVersionChangedBy")
   createdInspectionActions   InspectionAction[] @relation("InspectionActionCreatedBy")
   closedInspectionActions    InspectionAction[] @relation("InspectionActionClosedBy")
@@ -371,6 +373,10 @@ model InspectionRun {
   voidedById         String?              @map("voided_by_id")
   voidedBy           User?                @relation("InspectionRunVoidedBy", fields: [voidedById], references: [id], onDelete: SetNull)
   voidReason         String?              @map("void_reason")
+  archivedAt         DateTime?            @map("archived_at") @db.Timestamptz(6)
+  archivedById       String?              @map("archived_by_id")
+  archivedBy         User?                @relation("InspectionRunArchivedBy", fields: [archivedById], references: [id], onDelete: SetNull)
+  archiveReason      String?              @map("archive_reason")
   createdAt          DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
   actions            InspectionAction[]   @relation("ActionsCreatedOnRun")
   sectionCompletions InspectionRunSection[]
@@ -379,6 +385,7 @@ model InspectionRun {
   @@index([status, createdAt(sort: Desc)])
   @@index([createdAt(sort: Desc)])
   @@index([inspectionId, recordDate, shift])
+  @@index([archivedAt])
   @@map("inspection_runs")
 }
 
@@ -454,12 +461,17 @@ model PermitRun {
   closedAt            DateTime?       @map("closed_at") @db.Timestamptz(6)
   closedById          String?         @map("closed_by_id")
   closedBy            User?           @relation("PermitClosedBy", fields: [closedById], references: [id], onDelete: SetNull)
+  archivedAt          DateTime?       @map("archived_at") @db.Timestamptz(6)
+  archivedById        String?         @map("archived_by_id")
+  archivedBy          User?           @relation("PermitArchivedBy", fields: [archivedById], references: [id], onDelete: SetNull)
+  archiveReason       String?         @map("archive_reason")
   createdAt           DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt           DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@index([inspectionId])
   @@index([status, createdAt(sort: Desc)])
   @@index([createdAt(sort: Desc)])
+  @@index([archivedAt])
   @@map("permit_runs")
 }
 

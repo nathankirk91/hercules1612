@@ -23,15 +23,20 @@ export function PermitRecordCard({ run, statusBadge }: PermitRecordCardProps) {
     equipmentRef: run.equipmentRef,
     permitNumber: run.permitNumber,
   });
-  const statusLabel = statusBadge?.label ?? permitStatusLabel(run.status);
+  const isArchived = Boolean(run.archivedAt);
+  const statusLabel =
+    statusBadge?.label ??
+    (isArchived ? "Archived" : permitStatusLabel(run.status));
   const statusClassName =
     statusBadge?.className ??
-    cn(
-      run.status === "PENDING_AUTHORIZATION" &&
-        "border-sky-600/40 text-sky-800",
-      run.status === "OPEN" && "border-amber-600/40 text-amber-800",
-      run.status === "CLOSED" && "border-emerald-600/40 text-emerald-700",
-    );
+    (isArchived
+      ? "border-muted-foreground/40 text-muted-foreground"
+      : cn(
+          run.status === "PENDING_AUTHORIZATION" &&
+            "border-sky-600/40 text-sky-800",
+          run.status === "OPEN" && "border-amber-600/40 text-amber-800",
+          run.status === "CLOSED" && "border-emerald-600/40 text-emerald-700",
+        ));
 
   const metaParts = [
     formatMelbourneDateTime(run.createdAt),
@@ -41,6 +46,7 @@ export function PermitRecordCard({ run, statusBadge }: PermitRecordCardProps) {
       ? run.equipmentRef
       : null,
     run.area,
+    isArchived && run.archiveReason ? `Archived: ${run.archiveReason}` : null,
   ].filter(Boolean);
 
   return (
@@ -72,7 +78,7 @@ export function PermitRecordCard({ run, statusBadge }: PermitRecordCardProps) {
         </Link>
         <div className="flex flex-col items-end gap-2">
           <DownloadPdfLink href={`/permits/runs/${run.id}/pdf`} />
-          {run.status === "CLOSED" ? (
+          {run.status === "CLOSED" && !isArchived ? (
             <Button asChild variant="secondary" size="sm">
               <Link to={`/permits/runs/${run.id}/copy`}>
                 <CopyIcon data-icon="inline-start" />

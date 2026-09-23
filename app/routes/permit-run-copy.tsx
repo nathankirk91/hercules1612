@@ -45,6 +45,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   if (run.status !== "CLOSED") {
     throw redirect(`/permits/runs/${run.id}`);
   }
+  if (run.archivedAt) {
+    throw redirect(`/permits/runs/${run.id}`);
+  }
 
   const definition = await getPermitDefinition(run.inspectionId);
   if (!definition || !definition.isAvailable) {

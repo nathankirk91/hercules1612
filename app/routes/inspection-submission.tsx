@@ -26,11 +26,12 @@ import {
   type InspectionQuestionType,
 } from "~/lib/inspections";
 import {
+  archiveInspectionRun,
   closeInspectionAction,
   getInspectionRunById,
   type InspectionActionItem,
 } from "~/lib/inspections.server";
-import { canReviewRuns } from "~/lib/roles";
+import { canArchiveRuns, canReviewRuns } from "~/lib/roles";
 import { cn } from "~/lib/utils";
 
 export function meta({}: Route.MetaArgs) {
@@ -65,7 +66,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     user,
     run,
     pendingCount,
-    canCloseActions: canReviewRuns(user.role),
+    canCloseActions: canReviewRuns(user.role) && !run.archivedAt,
+    canArchive: canArchiveRuns(user.role) && !run.archivedAt,
   };
 }
 
@@ -75,6 +77,36 @@ export async function action({ request, params }: Route.ActionArgs) {
     `/inspections/submissions/${params.runId}`,
   );
 
+  const formData = await request.formData();
+  const intent = String(formData.get("intent") ?? "");
+
+  if (intent === "archive-record") {
+    if (!canArchiveRuns(user.role)) {
+      return {
+        ok: false as const,
+        error: "Only approvers and admins can archive a record.",
+        actionId: null as string | null,
+      };
+    }
+    try {
+      await archiveInspectionRun({
+        runId: params.runId,
+        userId: user.id,
+        reason: String(formData.get("reason") ?? ""),
+      });
+    } catch (error) {
+      return {
+        ok: false as const,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Could not archive this record.",
+        actionId: null as string | null,
+      };
+    }
+    throw redirect(`/inspections/submissions/${params.runId}`);
+  }
+
   if (!canReviewRuns(user.role)) {
     return {
       ok: false as const,
@@ -83,8 +115,6 @@ export async function action({ request, params }: Route.ActionArgs) {
     };
   }
 
-  const formData = await request.formData();
-  const intent = String(formData.get("intent") ?? "");
   if (intent !== "close-action") {
     return {
       ok: false as const,
@@ -109,6 +139,13 @@ export async function action({ request, params }: Route.ActionArgs) {
   const run = await getInspectionRunById(params.runId);
   if (!run) {
     throw new Response("Inspection submission not found", { status: 404 });
+  }
+  if (run.archivedAt) {
+    return {
+      ok: false as const,
+      error: "Archived records cannot be updated.",
+      actionId,
+    };
   }
 
   const belongsToRun = run.actions.some((item) => item.id === actionId);
@@ -137,9 +174,10 @@ export default function InspectionSubmissionPage({
   loaderData,
   actionData,
 }: Route.ComponentProps) {
-  const { user, run, pendingCount, canCloseActions } = loaderData;
+  const { user, run, pendingCount, canCloseActions, canArchive } = loaderData;
   const submittedAt = formatMelbourneDateTime(run.createdAt);
   const needsAttention = run.status === "NEEDS_ATTENTION";
+  const isArchived = Boolean(run.archivedAt);
   const openActionCount = run.actions.filter(
     (item) => item.status === "OPEN",
   ).length;
@@ -151,25 +189,47 @@ export default function InspectionSubmissionPage({
         <div className="mb-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <Badge variant="secondary">Inspection</Badge>
+            {isArchived ? (
+              <Badge
+                variant="outline"
+                className="border-muted-foreground/40 text-muted-foreground"
+              >
+                Archived
+              </Badge>
+            ) : null}
             <Link
-              to="/inspections"
+              to="/inspections/history"
               className="text-sm text-muted-foreground underline-offset-4 hover:underline"
             >
-              ← Inspections
+              ← Records
             </Link>
           </div>
           <h1 className="font-heading text-3xl font-semibold tracking-tight sm:text-4xl">
-            {needsAttention
-              ? "Inspection needs attention"
-              : "Inspection recorded"}
+            {isArchived
+              ? "Archived inspection"
+              : needsAttention
+                ? "Inspection needs attention"
+                : "Inspection recorded"}
           </h1>
           <p className="mt-2 max-w-2xl text-muted-foreground">
-            {needsAttention
-              ? "One or more answers were flagged for follow-up. Managers have been notified."
-              : openActionCount > 0
-                ? "This inspection passed. Open actions still need manager follow-up."
-                : "This inspection passed. The record is saved in history."}
+            {isArchived
+              ? "This record is archived and hidden from the default records list."
+              : needsAttention
+                ? "One or more answers were flagged for follow-up. Managers have been notified."
+                : openActionCount > 0
+                  ? "This inspection passed. Open actions still need manager follow-up."
+                  : "This inspection passed. The record is saved in history."}
           </p>
+          {isArchived && run.archiveReason ? (
+            <p className="mt-3 rounded-lg border border-border/70 bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+              <span className="font-medium text-foreground">Archive comment: </span>
+              {run.archiveReason}
+              {run.archivedByName ? ` — ${run.archivedByName}` : ""}
+              {run.archivedAt
+                ? ` · ${formatMelbourneDateTime(run.archivedAt)}`
+                : ""}
+            </p>
+          ) : null}
         </div>
 
         <Card className="animate-in fade-in slide-in-from-bottom-3 duration-500">
@@ -366,6 +426,47 @@ export default function InspectionSubmissionPage({
             </p>
           </CardContent>
         </Card>
+
+        {canArchive ? (
+          <Card className="mt-4 animate-in fade-in slide-in-from-bottom-3 duration-500">
+            <CardHeader>
+              <CardTitle>Archive record</CardTitle>
+              <CardDescription>
+                Approvers and admins can archive this submission. It stays
+                viewable with the comment below, but is hidden from the default
+                records list.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {actionData &&
+              !actionData.ok &&
+              actionData.actionId === null &&
+              actionData.error ? (
+                <p className="mb-3 text-sm text-destructive">
+                  {actionData.error}
+                </p>
+              ) : null}
+              <Form method="post" className="grid gap-3">
+                <input type="hidden" name="intent" value="archive-record" />
+                <div className="grid gap-2">
+                  <Label htmlFor="archive-reason">Archive comment</Label>
+                  <Textarea
+                    id="archive-reason"
+                    name="reason"
+                    required
+                    rows={2}
+                    placeholder="Why this record should be archived…"
+                  />
+                </div>
+                <div>
+                  <Button type="submit" variant="outline">
+                    Archive record
+                  </Button>
+                </div>
+              </Form>
+            </CardContent>
+          </Card>
+        ) : null}
       </main>
     </div>
   );

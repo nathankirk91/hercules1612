@@ -42,6 +42,7 @@ import {
   DEFAULT_PERMIT_REQUIRED_SIGNERS,
 } from "~/lib/permit.schema";
 import { ensureInspectionSchema } from "~/lib/migrate.server";
+import { normalizeArchiveReason } from "~/lib/record-archive";
 import {
   PERMIT_SLOT_CODES,
   userHasRoleForSlot,
@@ -70,6 +71,8 @@ export type PermitRunListItem = {
   closedAt: Date | null;
   submittedByName: string | null;
   attentionCount: number;
+  archivedAt: Date | null;
+  archiveReason: string | null;
 };
 
 export type PermitRunDetail = {
@@ -91,6 +94,9 @@ export type PermitRunDetail = {
   closedAt: Date | null;
   submittedByName: string | null;
   closedByName: string | null;
+  archivedAt: Date | null;
+  archivedByName: string | null;
+  archiveReason: string | null;
 };
 
 export async function listPermitCards(): Promise<{
@@ -383,7 +389,7 @@ export async function listPendingAuthorizationPermitRuns(args?: {
 }
 
 export async function listPermitRuns(args?: {
-  status?: PermitRunStatus | "ALL";
+  status?: PermitRunStatus | "ALL" | "ARCHIVED";
   limit?: number;
 }): Promise<PermitRunListItem[]> {
   const prisma = getPrisma();
@@ -395,7 +401,13 @@ export async function listPermitRuns(args?: {
     await ensureInspectionSchema();
     const status = args?.status ?? "ALL";
     const rows = await prisma.permitRun.findMany({
-      where: status === "ALL" ? undefined : { status },
+      where:
+        status === "ARCHIVED"
+          ? { archivedAt: { not: null } }
+          : {
+              archivedAt: null,
+              ...(status === "ALL" ? {} : { status }),
+            },
       orderBy: { createdAt: "desc" },
       take: args?.limit ?? 100,
       select: {
@@ -407,6 +419,8 @@ export async function listPermitRuns(args?: {
         closedAt: true,
         responses: true,
         summary: true,
+        archivedAt: true,
+        archiveReason: true,
         inspection: { select: { id: true, title: true } },
         submittedBy: { select: { name: true, email: true } },
       },
@@ -431,6 +445,8 @@ export async function listPermitRuns(args?: {
         closedAt: row.closedAt,
         submittedByName: row.submittedBy?.name ?? row.submittedBy?.email ?? null,
         attentionCount: summary.attentionCount,
+        archivedAt: row.archivedAt,
+        archiveReason: row.archiveReason,
       };
     });
   } catch {
@@ -474,6 +490,9 @@ export async function getPermitRunById(
         },
         submittedBy: { select: { name: true, email: true } },
         closedBy: { select: { name: true, email: true } },
+        archivedAt: true,
+        archiveReason: true,
+        archivedBy: { select: { name: true, email: true } },
       },
     });
     if (!row) {
@@ -501,6 +520,9 @@ export async function getPermitRunById(
       closedAt: row.closedAt,
       submittedByName: row.submittedBy?.name ?? row.submittedBy?.email ?? null,
       closedByName: row.closedBy?.name ?? row.closedBy?.email ?? null,
+      archivedAt: row.archivedAt,
+      archivedByName: row.archivedBy?.name ?? row.archivedBy?.email ?? null,
+      archiveReason: row.archiveReason,
     };
   } catch {
     return null;
@@ -553,11 +575,15 @@ export async function signOffPermitSlot(args: {
       id: true,
       status: true,
       authorization: true,
+      archivedAt: true,
       inspection: { select: { requiredSignerCount: true } },
     },
   });
   if (!existing) {
     throw new Error("Permit not found.");
+  }
+  if (existing.archivedAt) {
+    throw new Error("Archived permits cannot accept sign-off.");
   }
   if (existing.status === "CLOSED") {
     throw new Error("This permit is closed.");
@@ -645,10 +671,13 @@ export async function closePermitRun(args: {
 
   const existing = await prisma.permitRun.findUnique({
     where: { id: args.permitRunId },
-    select: { id: true, status: true },
+    select: { id: true, status: true, archivedAt: true },
   });
   if (!existing) {
     throw new Error("Permit not found.");
+  }
+  if (existing.archivedAt) {
+    throw new Error("Archived permits cannot be closed out.");
   }
   if (existing.status === "CLOSED") {
     throw new Error("This permit is already closed.");
@@ -672,6 +701,39 @@ export async function closePermitRun(args: {
     throw new Error("Permit not found after close-out.");
   }
   return detail;
+}
+
+export async function archivePermitRun(args: {
+  permitRunId: string;
+  userId: string;
+  reason: string;
+}): Promise<void> {
+  await ensureInspectionSchema();
+  const prisma = getPrisma();
+  if (!prisma) {
+    throw new Error("Database is not configured.");
+  }
+  const reason = normalizeArchiveReason(args.reason);
+
+  const existing = await prisma.permitRun.findUnique({
+    where: { id: args.permitRunId },
+    select: { id: true, archivedAt: true },
+  });
+  if (!existing) {
+    throw new Error("Permit not found.");
+  }
+  if (existing.archivedAt) {
+    throw new Error("This permit is already archived.");
+  }
+
+  await prisma.permitRun.update({
+    where: { id: args.permitRunId },
+    data: {
+      archivedAt: new Date(),
+      archivedById: args.userId,
+      archiveReason: reason,
+    },
+  });
 }
 
 function parseSummary(value: unknown): InspectionSummary {

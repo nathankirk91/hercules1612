@@ -102,6 +102,7 @@ export async function listRecordsForDay(args: {
       recordDate,
       equipmentRef: args.equipmentRef,
       status: { not: "VOIDED" },
+      archivedAt: null,
     },
     include: {
       sectionCompletions: {
@@ -203,6 +204,7 @@ export async function openInspectionRecord(args: {
       equipmentRef,
       shift,
       status: { not: "VOIDED" },
+      archivedAt: null,
     },
     select: { id: true },
   });
@@ -239,6 +241,7 @@ export async function openInspectionRecord(args: {
           equipmentRef,
           shift,
           status: { not: "VOIDED" },
+          archivedAt: null,
         },
         select: { id: true },
       });

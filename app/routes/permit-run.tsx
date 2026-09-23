@@ -25,6 +25,7 @@ import {
 } from "~/components/ui/card";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
+import { Textarea } from "~/components/ui/textarea";
 import { countPendingRuns } from "~/lib/approvals.server";
 import { requireUser } from "~/lib/auth.server";
 import { formatMelbourneDateTime } from "~/lib/datetime";
@@ -44,12 +45,13 @@ import {
   type PermitAuthSlotKey,
 } from "~/lib/permit.schema";
 import {
+  archivePermitRun,
   closePermitRun,
   getPermitRunById,
   listUnsignedSlotsForUser,
   signOffPermitSlot,
 } from "~/lib/permits.server";
-import { canReviewRuns } from "~/lib/roles";
+import { canArchiveRuns, canReviewRuns } from "~/lib/roles";
 import { cn } from "~/lib/utils";
 
 export function meta({}: Route.MetaArgs) {
@@ -71,8 +73,10 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   const pendingCount = canReviewRuns(user.role)
     ? await countPendingRuns()
     : 0;
+  const isArchived = Boolean(run.archivedAt);
   const canAcceptSignOff =
-    run.status === "PENDING_AUTHORIZATION" || run.status === "OPEN";
+    !isArchived &&
+    (run.status === "PENDING_AUTHORIZATION" || run.status === "OPEN");
   const signOffSlots = canAcceptSignOff
     ? await listUnsignedSlotsForUser({
         userId: user.id,
@@ -91,6 +95,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     run,
     signOffSlots,
     remainingUnsignedSlots,
+    canArchive: canArchiveRuns(user.role) && !isArchived,
   };
 }
 
@@ -103,6 +108,49 @@ export async function action({ request, params }: Route.ActionArgs) {
 
   const formData = await request.formData();
   const intent = String(formData.get("intent") ?? "closeout");
+
+  if (intent === "archive-record") {
+    if (!canArchiveRuns(user.role)) {
+      return data(
+        {
+          intent: "archive-record" as const,
+          error: "Only approvers and admins can archive a permit.",
+          lastResult: null,
+        },
+        { status: 403 },
+      );
+    }
+    try {
+      await archivePermitRun({
+        permitRunId: run.id,
+        userId: user.id,
+        reason: String(formData.get("reason") ?? ""),
+      });
+    } catch (error) {
+      return data(
+        {
+          intent: "archive-record" as const,
+          error:
+            error instanceof Error
+              ? error.message
+              : "Could not archive this permit.",
+          lastResult: null,
+        },
+        { status: 400 },
+      );
+    }
+    throw redirect(`/permits/runs/${run.id}`);
+  }
+
+  if (run.archivedAt) {
+    return data(
+      {
+        error: "Archived permits cannot be updated.",
+        lastResult: null,
+      },
+      { status: 400 },
+    );
+  }
 
   if (intent === "sign-off") {
     if (run.status !== "PENDING_AUTHORIZATION" && run.status !== "OPEN") {
@@ -211,9 +259,11 @@ export default function PermitRunPage({
     run,
     signOffSlots,
     remainingUnsignedSlots,
+    canArchive,
   } = loaderData;
-  const isPending = run.status === "PENDING_AUTHORIZATION";
-  const isOpen = run.status === "OPEN";
+  const isArchived = Boolean(run.archivedAt);
+  const isPending = !isArchived && run.status === "PENDING_AUTHORIZATION";
+  const isOpen = !isArchived && run.status === "OPEN";
   const isClosed = run.status === "CLOSED";
   const calculatedDuration = durationLabelFromAnswers(run.answers);
 
@@ -223,28 +273,37 @@ export default function PermitRunPage({
       <main className="mx-auto w-full max-w-4xl px-4 py-10 sm:px-6 sm:py-14">
         <div className="mb-8">
           <div className="mb-3 flex flex-wrap items-center gap-2">
-            <Badge
-              variant="outline"
-              className={cn(
-                isPending && "border-sky-600/40 text-sky-800",
-                isOpen && "border-amber-600/40 text-amber-800",
-                isClosed && "border-emerald-600/40 text-emerald-700",
-              )}
-            >
-              {isPending
-                ? "Pending authorization"
-                : isOpen
-                  ? "Open"
-                  : "Closed"}
-            </Badge>
+            {isArchived ? (
+              <Badge
+                variant="outline"
+                className="border-muted-foreground/40 text-muted-foreground"
+              >
+                Archived
+              </Badge>
+            ) : (
+              <Badge
+                variant="outline"
+                className={cn(
+                  isPending && "border-sky-600/40 text-sky-800",
+                  isOpen && "border-amber-600/40 text-amber-800",
+                  isClosed && "border-emerald-600/40 text-emerald-700",
+                )}
+              >
+                {isPending
+                  ? "Pending authorization"
+                  : isOpen
+                    ? "Open"
+                    : "Closed"}
+              </Badge>
+            )}
             <Link
-              to="/permits"
+              to="/permits/history"
               className="text-sm text-muted-foreground underline-offset-4 hover:underline"
             >
-              ← Permits
+              ← Records
             </Link>
             <DownloadPdfLink href={`/permits/runs/${run.id}/pdf`} />
-            {isClosed ? (
+            {isClosed && !isArchived ? (
               <Button asChild variant="secondary" size="sm">
                 <Link to={`/permits/runs/${run.id}/copy`}>
                   <CopyIcon data-icon="inline-start" />
@@ -270,6 +329,18 @@ export default function PermitRunPage({
             {run.equipmentRef ? ` · ${run.equipmentRef}` : ""}
             {calculatedDuration ? ` · Duration ${calculatedDuration}` : ""}
           </p>
+          {isArchived && run.archiveReason ? (
+            <p className="mt-3 rounded-lg border border-border/70 bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+              <span className="font-medium text-foreground">
+                Archive comment:{" "}
+              </span>
+              {run.archiveReason}
+              {run.archivedByName ? ` — ${run.archivedByName}` : ""}
+              {run.archivedAt
+                ? ` · ${formatMelbourneDateTime(run.archivedAt)}`
+                : ""}
+            </p>
+          ) : null}
         </div>
 
         <div className="grid gap-6">
@@ -506,6 +577,47 @@ export default function PermitRunPage({
                     />
                   </div>
                 </div>
+              </CardContent>
+            </Card>
+          ) : null}
+
+          {canArchive ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>Archive permit</CardTitle>
+                <CardDescription>
+                  Approvers and admins can archive this permit. It stays
+                  viewable with the comment below, but is hidden from the
+                  default records list and dashboard.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {actionData &&
+                "intent" in actionData &&
+                actionData.intent === "archive-record" &&
+                actionData.error ? (
+                  <p className="mb-3 text-sm text-destructive">
+                    {actionData.error}
+                  </p>
+                ) : null}
+                <Form method="post" className="grid gap-3">
+                  <input type="hidden" name="intent" value="archive-record" />
+                  <div className="grid gap-2">
+                    <Label htmlFor="archive-reason">Archive comment</Label>
+                    <Textarea
+                      id="archive-reason"
+                      name="reason"
+                      required
+                      rows={2}
+                      placeholder="Why this permit should be archived…"
+                    />
+                  </div>
+                  <div>
+                    <Button type="submit" variant="outline">
+                      Archive permit
+                    </Button>
+                  </div>
+                </Form>
               </CardContent>
             </Card>
           ) : null}

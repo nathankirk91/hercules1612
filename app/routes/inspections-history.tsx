@@ -54,14 +54,28 @@ export async function loader({ request }: Route.LoaderArgs) {
   const date =
     parseYmd(url.searchParams.get("date")) ?? melbourneDateYmd();
   const sort = parseInspectionHistorySort(url.searchParams.get("sort"));
+  const showArchived = url.searchParams.get("archived") === "1";
 
   const [inspections, forkliftDay, pendingCount] = await Promise.all([
-    listInspectionHistory({ date, sort, limit: 100 }),
+    listInspectionHistory({
+      date,
+      sort,
+      limit: 100,
+      archived: showArchived,
+    }),
     listForkliftChecksForDay(date),
     canReviewRuns(user.role) ? countPendingRuns() : Promise.resolve(0),
   ]);
 
-  return { user, inspections, forkliftDay, pendingCount, date, sort };
+  return {
+    user,
+    inspections,
+    forkliftDay,
+    pendingCount,
+    date,
+    sort,
+    showArchived,
+  };
 }
 
 const SORT_OPTIONS: Array<{ value: InspectionHistorySort; label: string }> = [
@@ -73,8 +87,15 @@ const SORT_OPTIONS: Array<{ value: InspectionHistorySort; label: string }> = [
 export default function InspectionsHistoryPage({
   loaderData,
 }: Route.ComponentProps) {
-  const { user, inspections, forkliftDay, pendingCount, date, sort } =
-    loaderData;
+  const {
+    user,
+    inspections,
+    forkliftDay,
+    pendingCount,
+    date,
+    sort,
+    showArchived,
+  } = loaderData;
   const navigation = useNavigation();
   const filtering = navigation.state !== "idle";
 
@@ -98,6 +119,7 @@ export default function InspectionsHistoryPage({
           <p className="mt-2 max-w-2xl text-muted-foreground">
             See which forklifts were checked on a given day, filter records by
             date, and surface runs that need attention or have actions raised.
+            Archived records are hidden unless you choose to show them.
           </p>
         </div>
 
@@ -137,6 +159,18 @@ export default function InspectionsHistoryPage({
                   {option.label}
                 </option>
               ))}
+            </select>
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="records-archived">Records</Label>
+            <select
+              id="records-archived"
+              name="archived"
+              defaultValue={showArchived ? "1" : "0"}
+              className="h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+            >
+              <option value="0">Active</option>
+              <option value="1">Archived</option>
             </select>
           </div>
           <Button type="submit" variant="secondary" disabled={filtering}>
@@ -195,7 +229,16 @@ export default function InspectionsHistoryPage({
                         </CardDescription>
                       </div>
                       <div className="flex shrink-0 flex-col items-end gap-2">
-                        <InspectionStatusBadge status={run.status} />
+                        {run.archivedAt ? (
+                          <Badge
+                            variant="outline"
+                            className="border-muted-foreground/40 text-muted-foreground"
+                          >
+                            Archived
+                          </Badge>
+                        ) : (
+                          <InspectionStatusBadge status={run.status} />
+                        )}
                         <DownloadPdfLink
                           href={`/inspections/submissions/${run.id}/pdf`}
                         />
@@ -203,6 +246,14 @@ export default function InspectionsHistoryPage({
                     </div>
                   </CardHeader>
                   <CardContent>
+                    {run.archivedAt && run.archiveReason ? (
+                      <p className="mb-4 text-sm text-muted-foreground">
+                        <span className="font-medium text-foreground">
+                          Archive comment:{" "}
+                        </span>
+                        {run.archiveReason}
+                      </p>
+                    ) : null}
                     <dl className="grid gap-3 sm:grid-cols-3">
                       <Stat
                         label="Answered"

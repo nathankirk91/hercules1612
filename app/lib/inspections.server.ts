@@ -42,6 +42,7 @@ import {
   parseWorkflowMode,
 } from "~/lib/inspection-workflow";
 import { normalizePermitNumberPrefix } from "~/lib/permit.schema";
+import { normalizeArchiveReason } from "~/lib/record-archive";
 
 function clampRequiredSignerCount(value: unknown): number {
   const n = typeof value === "number" ? value : Number(value);
@@ -175,6 +176,9 @@ export type InspectionHistoryItem = {
   answers: InspectionAnswerRecord[];
   responseRows: InspectionResponseRow[];
   actions: InspectionActionItem[];
+  archivedAt: Date | null;
+  archivedByName: string | null;
+  archiveReason: string | null;
 };
 
 export type ForkliftDayUnitStatus = {
@@ -2317,6 +2321,8 @@ export async function listInspectionHistory(
     /** Melbourne civil date YYYY-MM-DD. */
     date?: string | null;
     sort?: InspectionHistorySort | string | null;
+    /** When true, only archived records. Default lists active (non-archived). */
+    archived?: boolean;
   } = {},
 ): Promise<InspectionHistoryItem[]> {
   const prisma = getPrisma();
@@ -2327,9 +2333,11 @@ export async function listInspectionHistory(
   const limit = options.limit ?? 50;
   const sort = parseInspectionHistorySort(options.sort ?? null);
   const bounds = options.date ? melbourneDayBounds(options.date) : null;
+  const showArchived = options.archived === true;
 
   const rows = await prisma.inspectionRun.findMany({
     where: {
+      archivedAt: showArchived ? { not: null } : null,
       inspection: {
         NOT: {
           category: {
@@ -2356,8 +2364,11 @@ export async function listInspectionHistory(
       equipmentRef: true,
       notes: true,
       summary: true,
+      archivedAt: true,
+      archiveReason: true,
       inspection: { select: { id: true, title: true, href: true } },
       operatorUser: { select: { name: true, email: true } },
+      archivedBy: { select: { name: true, email: true } },
       _count: { select: { actions: true } },
     },
   });
@@ -2383,6 +2394,10 @@ export async function listInspectionHistory(
       answers: [] as InspectionAnswerRecord[],
       responseRows: [] as InspectionResponseRow[],
       actions: [] as InspectionActionItem[],
+      archivedAt: row.archivedAt,
+      archivedByName:
+        row.archivedBy?.name?.trim() || row.archivedBy?.email || null,
+      archiveReason: row.archiveReason,
     };
   });
 
@@ -2423,6 +2438,7 @@ export async function listForkliftChecksForDay(
     where: {
       equipmentRef: { in: [...unitValues] },
       status: { in: ["PASSED", "NEEDS_ATTENTION"] },
+      archivedAt: null,
       createdAt: {
         gte: bounds.start,
         lt: bounds.end,
@@ -2623,6 +2639,8 @@ export async function isFirstInspectionOfWeek(args: {
     where: {
       inspectionId: { in: inspectionIds },
       createdAt: { gte: weekStart },
+      archivedAt: null,
+      status: { not: "VOIDED" },
       ...(effectiveEquipmentRef
         ? { equipmentRef: effectiveEquipmentRef }
         : {}),
@@ -2681,6 +2699,7 @@ export async function getInspectionRunById(
     include: {
       inspection: { select: { id: true, title: true, href: true } },
       operatorUser: { select: { name: true, email: true } },
+      archivedBy: { select: { name: true, email: true } },
     },
   });
 
@@ -2722,7 +2741,52 @@ export async function getInspectionRunById(
     answers,
     responseRows: answers,
     actions: actionRows.map(mapInspectionAction),
+    archivedAt: row.archivedAt,
+    archivedByName:
+      row.archivedBy?.name?.trim() || row.archivedBy?.email || null,
+    archiveReason: row.archiveReason,
   };
+}
+
+export async function archiveInspectionRun(args: {
+  runId: string;
+  userId: string;
+  reason: string;
+}): Promise<void> {
+  await ensureInspectionSchemaReady();
+  const prisma = getPrisma();
+  if (!prisma) {
+    throw new Error("Database is not configured.");
+  }
+  const reason = normalizeArchiveReason(args.reason);
+
+  const run = await prisma.inspectionRun.findUnique({
+    where: { id: args.runId },
+    select: { id: true, status: true, archivedAt: true },
+  });
+  if (!run) {
+    throw new Error("Inspection record not found.");
+  }
+  if (run.archivedAt) {
+    throw new Error("This inspection record is already archived.");
+  }
+  if (run.status === "VOIDED") {
+    throw new Error("Voided records cannot be archived.");
+  }
+  if (run.status === "IN_PROGRESS") {
+    throw new Error(
+      "In-progress records should be voided, not archived. Open the record and use Void.",
+    );
+  }
+
+  await prisma.inspectionRun.update({
+    where: { id: args.runId },
+    data: {
+      archivedAt: new Date(),
+      archivedById: args.userId,
+      archiveReason: reason,
+    },
+  });
 }
 
 function mapInspectionAction(row: {
