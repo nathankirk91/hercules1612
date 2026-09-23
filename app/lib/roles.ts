@@ -69,3 +69,11 @@ export function canManageRoles(role: UserRole): boolean {
 export function canArchiveRuns(role: UserRole): boolean {
   return isApproverOrAdmin(role);
 }
+
+/**
+ * Permanently delete a permit/inspection form that has no submitted records
+ * and no derived forms.
+ */
+export function canDeleteUnusedForms(role: UserRole): boolean {
+  return role === "ADMIN";
+}

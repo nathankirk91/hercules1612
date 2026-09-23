@@ -11,6 +11,7 @@ const {
   canManageUsers,
   canManageRoles,
   canArchiveRuns,
+  canDeleteUnusedForms,
   HSOLENIS_OPERATOR_ROLE_SLUG,
   accessLevelLabel,
   isAccessLevelRole,
@@ -51,6 +52,10 @@ assert.equal(canManageRoles("ADMIN"), true);
 assert.equal(canArchiveRuns("STANDARD"), false);
 assert.equal(canArchiveRuns("APPROVER"), true);
 assert.equal(canArchiveRuns("ADMIN"), true);
+
+assert.equal(canDeleteUnusedForms("STANDARD"), false);
+assert.equal(canDeleteUnusedForms("APPROVER"), false);
+assert.equal(canDeleteUnusedForms("ADMIN"), true);
 
 assert.equal(HSOLENIS_OPERATOR_ROLE_SLUG, "hsolenis-operator");
 

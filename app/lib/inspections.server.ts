@@ -110,6 +110,11 @@ export type ManagedInspection = {
   version: number;
   /** True when this inspection owns the shared question list for derived forms. */
   isQuestionSource: boolean;
+  /**
+   * True when the form has no submitted runs and no derived forms — safe for
+   * admin-only permanent delete.
+   */
+  canDeleteUnused: boolean;
 };
 
 export type InspectionVersionSnapshot = {
@@ -634,6 +639,8 @@ async function listManagedInspectionsOnce(): Promise<ManagedInspection[]> {
         select: {
           questions: { where: { isActive: true } },
           unitForms: true,
+          runs: true,
+          permitRuns: true,
         },
       },
       template: {
@@ -673,6 +680,10 @@ async function listManagedInspectionsOnce(): Promise<ManagedInspection[]> {
       questionCount,
       version: row.version ?? 1,
       isQuestionSource: isMasterTemplate,
+      canDeleteUnused:
+        row._count.runs === 0 &&
+        row._count.permitRuns === 0 &&
+        row._count.unitForms === 0,
     };
   });
 }
@@ -1510,6 +1521,7 @@ export async function createManagedInspection(args: {
     questionCount: 0,
     version: row.version ?? 1,
     isQuestionSource: row.isMasterTemplate,
+    canDeleteUnused: true,
   };
 }
 
@@ -1612,6 +1624,51 @@ export async function setInspectionAvailability(
   if (updated.count === 0) {
     throw new Error("Inspection not found.");
   }
+}
+
+/**
+ * Permanently remove a form that has never been used (no inspection/permit
+ * runs) and has no derived forms. Callers must enforce admin-only access.
+ */
+export async function deleteUnusedManagedInspection(id: string): Promise<void> {
+  const prisma = getPrisma();
+  if (!prisma) {
+    throw new Error("Database is not configured.");
+  }
+
+  const existing = await prisma.inspection.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      _count: {
+        select: {
+          runs: true,
+          permitRuns: true,
+          unitForms: true,
+        },
+      },
+    },
+  });
+  if (!existing) {
+    throw new Error("Form not found.");
+  }
+  if (existing._count.unitForms > 0) {
+    throw new Error(
+      "Delete derived forms that inherit from this template first.",
+    );
+  }
+  if (existing._count.runs > 0 || existing._count.permitRuns > 0) {
+    throw new Error(
+      "This form has submitted records. Hide it instead of deleting, or archive the records first.",
+    );
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.inspectionQuestion.deleteMany({ where: { inspectionId: id } });
+    await tx.inspectionVersion.deleteMany({ where: { inspectionId: id } });
+    await tx.inspectionSection.deleteMany({ where: { inspectionId: id } });
+    await tx.inspection.delete({ where: { id } });
+  });
 }
 
 async function assertQuestionSourceInspection(

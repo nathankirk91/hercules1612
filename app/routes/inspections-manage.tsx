@@ -24,12 +24,15 @@ import {
 } from "~/lib/inspection-categories.server";
 import {
   createManagedInspection,
+  deleteUnusedManagedInspection,
+  getManagedInspection,
   listManagedInspections,
   seedDefaultInspections,
   setInspectionAvailability,
 } from "~/lib/inspections.server";
 import { isPermitInspection } from "~/lib/inspections";
 import { ensureInspectionSchema } from "~/lib/migrate.server";
+import { canDeleteUnusedForms } from "~/lib/roles";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -97,11 +100,12 @@ export async function loader({ request }: Route.LoaderArgs) {
     categories,
     pendingCount,
     migrateNote,
+    canDeleteUnused: canDeleteUnusedForms(user.role),
   };
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  await requireOperatorManager(request);
+  const user = await requireOperatorManager(request);
   const formData = await request.formData();
   const intent = String(formData.get("intent") ?? "");
 
@@ -149,6 +153,34 @@ export async function action({ request }: Route.ActionArgs) {
       await setInspectionAvailability(inspectionId, !isAvailable);
       return { ok: true as const };
     }
+
+    if (intent === "delete-unused") {
+      if (!canDeleteUnusedForms(user.role)) {
+        return data(
+          { error: "Only admins can delete unused inspection forms." },
+          { status: 403 },
+        );
+      }
+      const inspectionId = String(formData.get("inspectionId") ?? "");
+      if (!inspectionId) {
+        return data({ error: "Missing inspection." }, { status: 400 });
+      }
+      const existing = await getManagedInspection(inspectionId);
+      if (!existing) {
+        return data({ error: "Inspection not found." }, { status: 404 });
+      }
+      if (isPermitInspection(existing)) {
+        return data(
+          { error: "Delete permit forms under Permits → Manage." },
+          { status: 400 },
+        );
+      }
+      await deleteUnusedManagedInspection(inspectionId);
+      return {
+        ok: true as const,
+        message: "Unused inspection form deleted.",
+      };
+    }
   } catch (error) {
     if (error instanceof Response) {
       throw error;
@@ -178,6 +210,7 @@ export default function InspectionsManagePage({
     categories,
     pendingCount,
     migrateNote,
+    canDeleteUnused,
   } = loaderData;
 
   return (
@@ -225,6 +258,11 @@ export default function InspectionsManagePage({
               Loaded {actionData.seeded} default inspections (forklift template +
               unit forms, start-up, shut-down). Edit shared forklift questions on
               the master template.
+            </p>
+          ) : null}
+          {actionData && "message" in actionData && actionData.message ? (
+            <p className="mt-3 text-sm text-emerald-700 dark:text-emerald-400">
+              {actionData.message}
             </p>
           ) : null}
           {actionData && "error" in actionData && actionData.error ? (
@@ -363,6 +401,9 @@ export default function InspectionsManagePage({
               <CardTitle>All inspections</CardTitle>
               <CardDescription>
                 Edit questions, or hide an inspection from the Inspections page.
+                {canDeleteUnused
+                  ? " Admins can delete a form only when it has no submitted records and no derived forms."
+                  : null}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -434,6 +475,39 @@ export default function InspectionsManagePage({
                             {inspection.isAvailable ? "Hide" : "Show"}
                           </Button>
                         </Form>
+                        {canDeleteUnused && inspection.canDeleteUnused ? (
+                          <Form
+                            method="post"
+                            onSubmit={(event) => {
+                              if (
+                                !confirm(
+                                  `Delete unused form “${inspection.title}”? This cannot be undone.`,
+                                )
+                              ) {
+                                event.preventDefault();
+                              }
+                            }}
+                          >
+                            <input
+                              type="hidden"
+                              name="intent"
+                              value="delete-unused"
+                            />
+                            <input
+                              type="hidden"
+                              name="inspectionId"
+                              value={inspection.id}
+                            />
+                            <Button
+                              type="submit"
+                              variant="ghost"
+                              size="sm"
+                              className="text-destructive hover:text-destructive"
+                            >
+                              Delete
+                            </Button>
+                          </Form>
+                        ) : null}
                       </div>
                     </li>
                   ))}
