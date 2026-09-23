@@ -1614,47 +1614,6 @@ export async function setInspectionAvailability(
   }
 }
 
-/**
- * Permanently remove a permit or inspection form and all related data
- * (questions, sections, versions, inspection runs, permit runs, actions).
- * Callers must enforce admin-only access.
- */
-export async function hardDeleteManagedInspection(id: string): Promise<void> {
-  const prisma = getPrisma();
-  if (!prisma) {
-    throw new Error("Database is not configured.");
-  }
-
-  const existing = await prisma.inspection.findUnique({
-    where: { id },
-    select: {
-      id: true,
-      title: true,
-      _count: { select: { unitForms: true } },
-    },
-  });
-  if (!existing) {
-    throw new Error("Form not found.");
-  }
-  if (existing._count.unitForms > 0) {
-    throw new Error(
-      "Delete or reassign derived forms that inherit from this template first.",
-    );
-  }
-
-  await prisma.$transaction(async (tx) => {
-    // Run sections restrict deleting sections while references remain, so
-    // remove runs (and cascaded run sections / actions) before the form.
-    await tx.inspectionRun.deleteMany({ where: { inspectionId: id } });
-    await tx.inspectionAction.deleteMany({ where: { inspectionId: id } });
-    await tx.permitRun.deleteMany({ where: { inspectionId: id } });
-    await tx.inspectionQuestion.deleteMany({ where: { inspectionId: id } });
-    await tx.inspectionVersion.deleteMany({ where: { inspectionId: id } });
-    await tx.inspectionSection.deleteMany({ where: { inspectionId: id } });
-    await tx.inspection.delete({ where: { id } });
-  });
-}
-
 async function assertQuestionSourceInspection(
   inspectionId: string,
 ): Promise<void> {

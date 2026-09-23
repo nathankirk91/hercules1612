@@ -24,15 +24,12 @@ import {
 } from "~/lib/inspection-categories.server";
 import {
   createManagedInspection,
-  getManagedInspection,
-  hardDeleteManagedInspection,
   listManagedInspections,
   seedDefaultInspections,
   setInspectionAvailability,
 } from "~/lib/inspections.server";
 import { isPermitInspection } from "~/lib/inspections";
 import { ensureInspectionSchema } from "~/lib/migrate.server";
-import { canHardDeleteInspections } from "~/lib/roles";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -100,12 +97,11 @@ export async function loader({ request }: Route.LoaderArgs) {
     categories,
     pendingCount,
     migrateNote,
-    canHardDelete: canHardDeleteInspections(user.role),
   };
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  const user = await requireOperatorManager(request);
+  await requireOperatorManager(request);
   const formData = await request.formData();
   const intent = String(formData.get("intent") ?? "");
 
@@ -153,34 +149,6 @@ export async function action({ request }: Route.ActionArgs) {
       await setInspectionAvailability(inspectionId, !isAvailable);
       return { ok: true as const };
     }
-
-    if (intent === "hard-delete") {
-      if (!canHardDeleteInspections(user.role)) {
-        return data(
-          { error: "Only admins can permanently delete inspection forms." },
-          { status: 403 },
-        );
-      }
-      const inspectionId = String(formData.get("inspectionId") ?? "");
-      if (!inspectionId) {
-        return data({ error: "Missing inspection." }, { status: 400 });
-      }
-      const existing = await getManagedInspection(inspectionId);
-      if (!existing) {
-        return data({ error: "Inspection not found." }, { status: 404 });
-      }
-      if (isPermitInspection(existing)) {
-        return data(
-          { error: "Delete permit forms under Permits → Manage." },
-          { status: 400 },
-        );
-      }
-      await hardDeleteManagedInspection(inspectionId);
-      return {
-        ok: true as const,
-        message: "Inspection form permanently deleted.",
-      };
-    }
   } catch (error) {
     if (error instanceof Response) {
       throw error;
@@ -210,7 +178,6 @@ export default function InspectionsManagePage({
     categories,
     pendingCount,
     migrateNote,
-    canHardDelete,
   } = loaderData;
 
   return (
@@ -258,11 +225,6 @@ export default function InspectionsManagePage({
               Loaded {actionData.seeded} default inspections (forklift template +
               unit forms, start-up, shut-down). Edit shared forklift questions on
               the master template.
-            </p>
-          ) : null}
-          {actionData && "message" in actionData && actionData.message ? (
-            <p className="mt-3 text-sm text-emerald-700 dark:text-emerald-400">
-              {actionData.message}
             </p>
           ) : null}
           {actionData && "error" in actionData && actionData.error ? (
@@ -401,9 +363,6 @@ export default function InspectionsManagePage({
               <CardTitle>All inspections</CardTitle>
               <CardDescription>
                 Edit questions, or hide an inspection from the Inspections page.
-                {canHardDelete
-                  ? " Admins can permanently delete a form and all of its records."
-                  : null}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -475,39 +434,6 @@ export default function InspectionsManagePage({
                             {inspection.isAvailable ? "Hide" : "Show"}
                           </Button>
                         </Form>
-                        {canHardDelete ? (
-                          <Form
-                            method="post"
-                            onSubmit={(event) => {
-                              if (
-                                !confirm(
-                                  `Permanently delete “${inspection.title}” and all of its inspection records? This cannot be undone.`,
-                                )
-                              ) {
-                                event.preventDefault();
-                              }
-                            }}
-                          >
-                            <input
-                              type="hidden"
-                              name="intent"
-                              value="hard-delete"
-                            />
-                            <input
-                              type="hidden"
-                              name="inspectionId"
-                              value={inspection.id}
-                            />
-                            <Button
-                              type="submit"
-                              variant="ghost"
-                              size="sm"
-                              className="text-destructive hover:text-destructive"
-                            >
-                              Delete
-                            </Button>
-                          </Form>
-                        ) : null}
                       </div>
                     </li>
                   ))}

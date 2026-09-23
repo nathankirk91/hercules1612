@@ -65,11 +65,6 @@ export function canManageRoles(role: UserRole): boolean {
   return role === "ADMIN";
 }
 
-/** Permanently delete permit/inspection forms and their submitted runs. */
-export function canHardDeleteInspections(role: UserRole): boolean {
-  return role === "ADMIN";
-}
-
 /** Archive permit/inspection records with a required comment. */
 export function canArchiveRuns(role: UserRole): boolean {
   return isApproverOrAdmin(role);
