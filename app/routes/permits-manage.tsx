@@ -18,13 +18,20 @@ import { Label } from "~/components/ui/label";
 import { Textarea } from "~/components/ui/textarea";
 import { countPendingRuns } from "~/lib/approvals.server";
 import { requireOperatorManager } from "~/lib/auth.server";
-import { seedDefaultInspections, setInspectionAvailability } from "~/lib/inspections.server";
+import {
+  hardDeleteManagedInspection,
+  seedDefaultInspections,
+  setInspectionAvailability,
+  getManagedInspection,
+} from "~/lib/inspections.server";
 import {
   createManagedPermit,
   duplicateManagedPermit,
   listManagedPermits,
 } from "~/lib/permits.server";
 import { ensureInspectionSchema } from "~/lib/migrate.server";
+import { isPermitInspection } from "~/lib/inspections";
+import { canHardDeleteInspections } from "~/lib/roles";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -57,11 +64,17 @@ export async function loader({ request }: Route.LoaderArgs) {
   }
 
   const pendingCount = await countPendingRuns();
-  return { user, permits, pendingCount, migrateNote };
+  return {
+    user,
+    permits,
+    pendingCount,
+    migrateNote,
+    canHardDelete: canHardDeleteInspections(user.role),
+  };
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  await requireOperatorManager(request);
+  const user = await requireOperatorManager(request);
   const formData = await request.formData();
   const intent = String(formData.get("intent") ?? "");
 
@@ -105,6 +118,34 @@ export async function action({ request }: Route.ActionArgs) {
       await setInspectionAvailability(inspectionId, !isAvailable);
       return { ok: true as const };
     }
+
+    if (intent === "hard-delete") {
+      if (!canHardDeleteInspections(user.role)) {
+        return data(
+          { error: "Only admins can permanently delete permit forms." },
+          { status: 403 },
+        );
+      }
+      const inspectionId = String(formData.get("inspectionId") ?? "");
+      if (!inspectionId) {
+        return data({ error: "Missing permit." }, { status: 400 });
+      }
+      const existing = await getManagedInspection(inspectionId);
+      if (!existing) {
+        return data({ error: "Permit form not found." }, { status: 404 });
+      }
+      if (!isPermitInspection(existing)) {
+        return data(
+          { error: "Delete inspection forms under Inspections → Manage." },
+          { status: 400 },
+        );
+      }
+      await hardDeleteManagedInspection(inspectionId);
+      return {
+        ok: true as const,
+        message: "Permit form permanently deleted.",
+      };
+    }
   } catch (error) {
     if (error instanceof Response) {
       throw error;
@@ -127,7 +168,8 @@ export default function PermitsManagePage({
   loaderData,
   actionData,
 }: Route.ComponentProps) {
-  const { user, permits, pendingCount, migrateNote } = loaderData;
+  const { user, permits, pendingCount, migrateNote, canHardDelete } =
+    loaderData;
 
   return (
     <div className="app-shell">
@@ -160,6 +202,11 @@ export default function PermitsManagePage({
           {actionData && "seeded" in actionData && actionData.seeded != null ? (
             <p className="mt-3 text-sm text-emerald-700 dark:text-emerald-400">
               Synced {actionData.seeded} built-in forms.
+            </p>
+          ) : null}
+          {actionData && "message" in actionData && actionData.message ? (
+            <p className="mt-3 text-sm text-emerald-700 dark:text-emerald-400">
+              {actionData.message}
             </p>
           ) : null}
           {actionData && "error" in actionData && actionData.error ? (
@@ -244,6 +291,9 @@ export default function PermitsManagePage({
               <CardDescription>
                 Edit questions, duplicate an existing form as a starting point,
                 or hide a form from the Permits page.
+                {canHardDelete
+                  ? " Admins can permanently delete a form and all of its records."
+                  : null}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -313,6 +363,39 @@ export default function PermitsManagePage({
                             {permit.isAvailable ? "Hide" : "Show"}
                           </Button>
                         </Form>
+                        {canHardDelete ? (
+                          <Form
+                            method="post"
+                            onSubmit={(event) => {
+                              if (
+                                !confirm(
+                                  `Permanently delete “${permit.title}” and all of its permit records? This cannot be undone.`,
+                                )
+                              ) {
+                                event.preventDefault();
+                              }
+                            }}
+                          >
+                            <input
+                              type="hidden"
+                              name="intent"
+                              value="hard-delete"
+                            />
+                            <input
+                              type="hidden"
+                              name="inspectionId"
+                              value={permit.id}
+                            />
+                            <Button
+                              type="submit"
+                              variant="ghost"
+                              size="sm"
+                              className="text-destructive hover:text-destructive"
+                            >
+                              Delete
+                            </Button>
+                          </Form>
+                        ) : null}
                       </div>
                     </li>
                   ))}
