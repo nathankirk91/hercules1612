@@ -80,6 +80,12 @@ export async function action({ request, params }: Route.ActionArgs) {
       { status: 400 },
     );
   }
+  if (run.archivedAt) {
+    return data(
+      { lastResult: null, error: "Archived permits cannot be copied." },
+      { status: 400 },
+    );
+  }
 
   const definition = await getPermitDefinition(run.inspectionId);
   if (!definition || !definition.isAvailable) {
