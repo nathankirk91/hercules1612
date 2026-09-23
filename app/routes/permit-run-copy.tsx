@@ -112,7 +112,7 @@ export async function action({ request, params }: Route.ActionArgs) {
     return data(
       {
         lastResult: null,
-        error: "Select headings from this permit only.",
+        error: "Select sections from this permit only.",
       },
       { status: 400 },
     );

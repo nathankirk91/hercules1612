@@ -127,7 +127,7 @@ export function PermitIssueForm({
                 <p className="mt-1 text-muted-foreground">
                   {copiedFrom.headingTitles.length > 0
                     ? `Included: ${copiedFrom.headingTitles.join(", ")}. `
-                    : "No headings were selected. "}
+                    : "No sections were selected. "}
                   Signatures, dates, and times were left blank.
                 </p>
               </section>

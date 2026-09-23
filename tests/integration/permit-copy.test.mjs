@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 
 /**
  * Integration: copying a closed permit keeps signatures, dates, and times
- * out of the new issue form even when those headings are selected.
+ * out of the new issue form even when those sections are selected.
  */
 const { SAFE_WORK_PERMIT, groupQuestionsBySection } = await import(
   "../../app/lib/inspections.ts"
@@ -18,6 +18,7 @@ const {
   listCopyablePermitHeadings,
   looksLikeSignatureValue,
   parseCopyHeadingsFromSearchParams,
+  permitCopyFieldPreview,
   selectedHeadingsFromFormData,
 } = await import("../../app/lib/permit-copy.ts");
 
@@ -121,11 +122,31 @@ const sourceAnswers = [
   const permitDetails = headings.find(
     (heading) => heading.key === headingKeyForSectionTitle("Permit details"),
   );
-  assert.deepEqual(permitDetails?.fieldLabels, ["Area"]);
+  assert.deepEqual(
+    permitDetails?.fields.map((field) => ({
+      label: field.label,
+      answer: field.answer,
+    })),
+    [{ label: "Area", answer: "Tank farm" }],
+  );
   assert.equal(
     headings.some((heading) => heading.title === "Close-out initials"),
     false,
   );
+  const equipment = headings.find(
+    (heading) => heading.key === PERMIT_COPY_EQUIPMENT_HEADING_KEY,
+  );
+  assert.deepEqual(
+    equipment?.fields.map((field) => field.answer),
+    ["P-120"],
+  );
+  const preview = permitCopyFieldPreview([
+    { label: "Q1", answer: "Yes", type: "RADIO" },
+    { label: "Q2", answer: "No", type: "RADIO" },
+    { label: "Q3", answer: "N/A", type: "RADIO" },
+  ]);
+  assert.equal(preview.preview.length, 2);
+  assert.equal(preview.remaining, 1);
 }
 
 {
@@ -253,7 +274,7 @@ const copyableSections = groupQuestionsBySection(SAFE_WORK_PERMIT.questions)
   )
   .map((section) => headingKeyForSectionTitle(section.title));
 for (const key of copyableSections) {
-  assert.ok(headingKeys.includes(key), `expected copyable heading ${key}`);
+  assert.ok(headingKeys.includes(key), `expected copyable section ${key}`);
 }
 
 {

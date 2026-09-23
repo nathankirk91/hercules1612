@@ -23,11 +23,20 @@ type CopyableField = {
   id?: string;
 };
 
+export type CopyablePermitField = {
+  label: string;
+  answer: string;
+  type: InspectionQuestionType;
+};
+
 export type CopyablePermitHeading = {
   key: string;
   title: string;
-  fieldLabels: string[];
+  fields: CopyablePermitField[];
 };
+
+/** Sections with more fields than this use accordion expand/collapse. */
+export const PERMIT_COPY_INLINE_FIELD_LIMIT = 3;
 
 export type CopiedPermitValues = {
   equipmentRef: string;
@@ -101,11 +110,18 @@ export function listCopyablePermitHeadings(args: {
 }): CopyablePermitHeading[] {
   const headings: CopyablePermitHeading[] = [];
   const equipmentRef = args.equipmentRef?.trim() ?? "";
-  if (args.equipmentLabel?.trim() && equipmentRef) {
+  const equipmentLabel = args.equipmentLabel?.trim() ?? "";
+  if (equipmentLabel && equipmentRef) {
     headings.push({
       key: PERMIT_COPY_EQUIPMENT_HEADING_KEY,
-      title: args.equipmentLabel.trim(),
-      fieldLabels: [equipmentRef],
+      title: equipmentLabel,
+      fields: [
+        {
+          label: equipmentLabel,
+          answer: equipmentRef,
+          type: "TEXT",
+        },
+      ],
     });
   }
 
@@ -120,23 +136,42 @@ export function listCopyablePermitHeadings(args: {
     ) {
       continue;
     }
+    if (looksLikeSignatureValue(answer.answer)) {
+      continue;
+    }
     const key = headingKeyForSectionTitle(answer.sectionTitle);
     const title = answer.sectionTitle?.trim() || UNTITLED_SECTION_TITLE;
+    const field: CopyablePermitField = {
+      label: answer.label,
+      answer: answer.answer,
+      type: answer.type,
+    };
     const existing = headings.find((heading) => heading.key === key);
     if (existing) {
-      if (!existing.fieldLabels.includes(answer.label)) {
-        existing.fieldLabels.push(answer.label);
+      if (!existing.fields.some((row) => row.label === answer.label)) {
+        existing.fields.push(field);
       }
     } else {
       headings.push({
         key,
         title,
-        fieldLabels: [answer.label],
+        fields: [field],
       });
     }
   }
 
   return headings;
+}
+
+export function permitCopyFieldPreview(
+  fields: CopyablePermitField[],
+  previewCount = 2,
+): { preview: CopyablePermitField[]; remaining: number } {
+  const preview = fields.slice(0, Math.max(0, previewCount));
+  return {
+    preview,
+    remaining: Math.max(0, fields.length - preview.length),
+  };
 }
 
 function findMatchingQuestion(
@@ -225,7 +260,7 @@ export function createPermitCopyFormSchema(allowedHeadingKeys: string[]) {
       if (!allowed.has(key)) {
         ctx.addIssue({
           code: "custom",
-          message: "Select headings from this permit only.",
+          message: "Select sections from this permit only.",
           path: ["heading"],
         });
         return;
