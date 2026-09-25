@@ -1,9 +1,8 @@
-import { Form, Link } from "react-router";
+import { Form } from "react-router";
 
 import type { Route } from "./+types/permits-history";
 
 import { pageTitle } from "~/lib/brand";
-import { AppHeader } from "~/components/app-header";
 import { PermitRecordCard } from "~/components/permit-record-card";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
@@ -44,62 +43,53 @@ export async function loader({ request }: Route.LoaderArgs) {
 export default function PermitsHistoryPage({
   loaderData,
 }: Route.ComponentProps) {
-  const { user, runs, pendingCount, status } = loaderData;
+  const { runs, status } = loaderData;
 
   return (
-    <div className="app-shell">
-      <AppHeader user={user} pendingCount={pendingCount} />
-      <main className="mx-auto w-full max-w-4xl px-4 py-10 sm:px-6 sm:py-14">
-        <div className="mb-8">
-          <div className="mb-3 flex flex-wrap items-center gap-2">
-            <Badge variant="secondary">Records</Badge>
-            <Link
-              to="/permits"
-              className="text-sm text-muted-foreground underline-offset-4 hover:underline"
-            >
-              ← Permits
-            </Link>
-          </div>
-          <h1 className="font-heading text-3xl font-semibold tracking-tight">
-            Permit records
-          </h1>
-          <p className="mt-2 text-muted-foreground">
-            Pending, open, and closed permits. Closed Safe Work Permits are
-            retained for at least one year.
-          </p>
+    <main className="mx-auto w-full max-w-4xl px-4 py-10 sm:px-6 sm:py-14">
+      <div className="mb-8">
+        <div className="mb-3">
+          <Badge variant="secondary">Records</Badge>
         </div>
+        <h1 className="font-heading text-3xl font-semibold tracking-tight">
+          Permit records
+        </h1>
+        <p className="mt-2 text-muted-foreground">
+          Pending, open, and closed permits. Closed Safe Work Permits are
+          retained for at least one year.
+        </p>
+      </div>
 
-        <Form method="get" className="mb-6 flex flex-wrap items-end gap-3">
-          <div className="grid gap-1.5">
-            <Label htmlFor="status">Status</Label>
-            <select
-              id="status"
-              name="status"
-              defaultValue={status}
-              className="flex h-9 rounded-lg border border-input bg-transparent px-3 py-1 text-sm"
-            >
-              <option value="ALL">All active</option>
-              <option value="PENDING_AUTHORIZATION">Pending authorization</option>
-              <option value="OPEN">Open</option>
-              <option value="CLOSED">Closed</option>
-              <option value="ARCHIVED">Archived</option>
-            </select>
-          </div>
-          <Button type="submit" variant="secondary" size="sm">
-            Filter
-          </Button>
-        </Form>
+      <Form method="get" className="mb-6 flex flex-wrap items-end gap-3">
+        <div className="grid gap-1.5">
+          <Label htmlFor="status">Status</Label>
+          <select
+            id="status"
+            name="status"
+            defaultValue={status}
+            className="flex h-9 rounded-lg border border-input bg-transparent px-3 py-1 text-sm"
+          >
+            <option value="ALL">All active</option>
+            <option value="PENDING_AUTHORIZATION">Pending authorization</option>
+            <option value="OPEN">Open</option>
+            <option value="CLOSED">Closed</option>
+            <option value="ARCHIVED">Archived</option>
+          </select>
+        </div>
+        <Button type="submit" variant="secondary" size="sm">
+          Filter
+        </Button>
+      </Form>
 
-        {runs.length > 0 ? (
-          <ul className="grid gap-3">
-            {runs.map((run) => (
-              <PermitRecordCard key={run.id} run={run} />
-            ))}
-          </ul>
-        ) : (
-          <p className="text-muted-foreground">No permits match this filter.</p>
-        )}
-      </main>
-    </div>
+      {runs.length > 0 ? (
+        <ul className="grid gap-3">
+          {runs.map((run) => (
+            <PermitRecordCard key={run.id} run={run} />
+          ))}
+        </ul>
+      ) : (
+        <p className="text-muted-foreground">No permits match this filter.</p>
+      )}
+    </main>
   );
 }

@@ -1,4 +1,9 @@
-import { type RouteConfig, index, route } from "@react-router/dev/routes";
+import {
+  type RouteConfig,
+  index,
+  layout,
+  route,
+} from "@react-router/dev/routes";
 
 export default [
   index("routes/home.tsx"),
@@ -22,15 +27,17 @@ export default [
     "routes/polymer-an04-adipic-deta.tsx",
   ),
   route("inspections", "routes/inspections.tsx"),
-  route("permits", "routes/permits.tsx"),
-  route("permits/dashboard", "routes/permits-dashboard.tsx"),
-  route("permits/history", "routes/permits-history.tsx"),
-  route("permits/manage", "routes/permits-manage.tsx"),
-  route(
-    "permits/manage/:inspectionId",
-    "routes/permits-manage-detail.tsx",
-  ),
-  route("permits/settings", "routes/permits-settings.tsx"),
+  layout("routes/permits-hub-layout.tsx", [
+    route("permits", "routes/permits.tsx"),
+    route("permits/dashboard", "routes/permits-dashboard.tsx"),
+    route("permits/history", "routes/permits-history.tsx"),
+    route("permits/manage", "routes/permits-manage.tsx"),
+    route(
+      "permits/manage/:inspectionId",
+      "routes/permits-manage-detail.tsx",
+    ),
+    route("permits/settings", "routes/permits-settings.tsx"),
+  ]),
   route("permits/runs/:permitRunId/pdf/view", "routes/permit-run-pdf-view.tsx"),
   route("permits/runs/:permitRunId/pdf", "routes/permit-run-pdf.tsx"),
   route("permits/runs/:permitRunId/copy", "routes/permit-run-copy.tsx"),

@@ -28,6 +28,26 @@ test.describe("authentication gates", () => {
     await expect(page).toHaveURL(/\/login/);
   });
 
+  test("permits dashboard redirects to login", async ({ page }) => {
+    await page.goto("/permits/dashboard");
+    await expect(page).toHaveURL(/\/login/);
+  });
+
+  test("permits history redirects to login", async ({ page }) => {
+    await page.goto("/permits/history");
+    await expect(page).toHaveURL(/\/login/);
+  });
+
+  test("permits manage redirects to login", async ({ page }) => {
+    await page.goto("/permits/manage");
+    await expect(page).toHaveURL(/\/login/);
+  });
+
+  test("permits settings redirects to login", async ({ page }) => {
+    await page.goto("/permits/settings");
+    await expect(page).toHaveURL(/\/login/);
+  });
+
   test("copy closed permit page redirects to login", async ({ page }) => {
     await page.goto("/permits/runs/example/copy");
     await expect(page).toHaveURL(/\/login/);
