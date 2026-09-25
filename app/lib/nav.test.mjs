@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
 
 const {
+  activePermitsSectionNavTo,
   buildNavItems,
   findNavGroup,
   groupHasMultipleSections,
   groupIsActive,
   navLabels,
   pathMatches,
+  permitsSectionNavItems,
 } = await import("./nav.ts");
 
 const signedOut = buildNavItems({
@@ -115,6 +117,76 @@ assert.equal(
     "/permits/dashboard",
   ),
   true,
+);
+
+const operatorPermitsNav = permitsSectionNavItems({
+  signedIn: true,
+  canReview: false,
+  canManageOperators: false,
+  canManageUsers: false,
+  canManageRoles: false,
+});
+assert.deepEqual(
+  operatorPermitsNav.map((child) => child.label),
+  ["Dashboard", "Forms", "Records"],
+);
+assert.equal(
+  activePermitsSectionNavTo({ pathname: "/permits", hash: "" }, operatorPermitsNav),
+  "/permits",
+);
+assert.equal(
+  activePermitsSectionNavTo(
+    { pathname: "/permits/dashboard", hash: "" },
+    operatorPermitsNav,
+  ),
+  "/permits/dashboard",
+);
+assert.equal(
+  activePermitsSectionNavTo(
+    { pathname: "/permits/history", hash: "" },
+    operatorPermitsNav,
+  ),
+  "/permits/history",
+);
+assert.equal(
+  activePermitsSectionNavTo(
+    { pathname: "/permits/runs/abc", hash: "" },
+    operatorPermitsNav,
+  ),
+  undefined,
+);
+
+const managerPermitsNav = permitsSectionNavItems({
+  signedIn: true,
+  canReview: true,
+  canManageOperators: true,
+  canManageUsers: false,
+  canManageRoles: false,
+});
+assert.deepEqual(
+  managerPermitsNav.map((child) => child.label),
+  ["Dashboard", "Forms", "Records", "Manage", "Settings"],
+);
+assert.equal(
+  activePermitsSectionNavTo(
+    { pathname: "/permits/manage", hash: "" },
+    managerPermitsNav,
+  ),
+  "/permits/manage",
+);
+assert.equal(
+  activePermitsSectionNavTo(
+    { pathname: "/permits/manage/form-1", hash: "" },
+    managerPermitsNav,
+  ),
+  "/permits/manage",
+);
+assert.equal(
+  activePermitsSectionNavTo(
+    { pathname: "/permits/settings", hash: "" },
+    managerPermitsNav,
+  ),
+  "/permits/settings",
 );
 
 const adminNav = buildNavItems({

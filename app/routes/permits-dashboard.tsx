@@ -1,10 +1,9 @@
-import { Link } from "react-router";
-
 import type { Route } from "./+types/permits-dashboard";
 
 import { pageTitle } from "~/lib/brand";
 import { AppHeader } from "~/components/app-header";
 import { PermitDashboard } from "~/components/permit-dashboard";
+import { PermitsSectionNav } from "~/components/permits-section-nav";
 import { Badge } from "~/components/ui/badge";
 import { countPendingRuns } from "~/lib/approvals.server";
 import { requireUser } from "~/lib/auth.server";
@@ -52,15 +51,10 @@ export default function PermitsDashboardPage({
     <div className="app-shell">
       <AppHeader user={user} pendingCount={pendingCount} />
       <main className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 sm:py-14">
+        <PermitsSectionNav canManageOperators={canManage} />
         <section className="mb-12 max-w-2xl animate-in fade-in slide-in-from-bottom-2 duration-500">
-          <div className="mb-3 flex flex-wrap items-center gap-2">
+          <div className="mb-3">
             <Badge variant="secondary">Permits</Badge>
-            <Link
-              to="/permits"
-              className="text-sm text-muted-foreground underline-offset-4 hover:underline"
-            >
-              Issue a permit
-            </Link>
           </div>
           <h1 className="font-heading text-4xl font-semibold tracking-tight text-brand-navy sm:text-5xl">
             Dashboard
@@ -69,30 +63,6 @@ export default function PermitsDashboardPage({
             Active permits that need authorization or close-out. Closed permits
             are in Records.
           </p>
-          <div className="mt-4 flex flex-wrap gap-3 text-sm">
-            <Link
-              to="/permits/history"
-              className="text-brand-navy underline-offset-4 hover:underline"
-            >
-              Records
-            </Link>
-            {canManage ? (
-              <>
-                <Link
-                  to="/permits/manage"
-                  className="text-brand-navy underline-offset-4 hover:underline"
-                >
-                  Manage forms
-                </Link>
-                <Link
-                  to="/permits/settings"
-                  className="text-brand-navy underline-offset-4 hover:underline"
-                >
-                  Settings
-                </Link>
-              </>
-            ) : null}
-          </div>
         </section>
 
         <div className="animate-in fade-in slide-in-from-bottom-3 duration-500">

@@ -103,6 +103,20 @@ export function findNavGroup(items: NavItem[], id: string) {
   );
 }
 
+/** Section secondary-nav links for the Permits hub (Dashboard, Forms, …). */
+export function permitsSectionNavItems(capabilities: NavCapabilities) {
+  const group = findNavGroup(buildNavItems(capabilities), "permits");
+  return group?.children ?? [];
+}
+
+/** Active permits hub tab for the current path, if any. */
+export function activePermitsSectionNavTo(
+  location: PathLocation,
+  items: NavGroupChild[],
+) {
+  return items.find((item) => pathMatches(location, item.to))?.to;
+}
+
 export function buildNavItems({
   signedIn,
   canReview,
