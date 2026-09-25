@@ -4,6 +4,7 @@ import type { Route } from "./+types/permits-manage";
 
 import { pageTitle } from "~/lib/brand";
 import { AppHeader } from "~/components/app-header";
+import { PermitsSectionChrome } from "~/components/permits-section-chrome";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import {
@@ -175,16 +176,8 @@ export default function PermitsManagePage({
     <div className="app-shell">
       <AppHeader user={user} pendingCount={pendingCount} />
       <main className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6 sm:py-14">
+        <PermitsSectionChrome user={user} pendingCount={pendingCount} />
         <div className="mb-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
-          <div className="mb-3 flex flex-wrap items-center gap-2">
-            <Badge variant="secondary">Management</Badge>
-            <Link
-              to="/permits"
-              className="text-sm text-muted-foreground underline-offset-4 hover:underline"
-            >
-              ← Permits
-            </Link>
-          </div>
           <h1 className="font-heading text-3xl font-semibold tracking-tight sm:text-4xl">
             Manage permits
           </h1>

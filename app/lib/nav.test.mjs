@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 
 const {
   buildNavItems,
+  buildPermitsBreadcrumbs,
   findNavGroup,
   groupHasMultipleSections,
   groupIsActive,
@@ -116,6 +117,46 @@ assert.equal(
   ),
   true,
 );
+
+assert.deepEqual(buildPermitsBreadcrumbs("/permits"), [
+  { label: "Permits", to: "/permits" },
+  { label: "Forms" },
+]);
+assert.deepEqual(buildPermitsBreadcrumbs("/permits/dashboard"), [
+  { label: "Permits", to: "/permits" },
+  { label: "Dashboard" },
+]);
+assert.deepEqual(buildPermitsBreadcrumbs("/permits/history"), [
+  { label: "Permits", to: "/permits" },
+  { label: "Records" },
+]);
+assert.deepEqual(buildPermitsBreadcrumbs("/permits/manage"), [
+  { label: "Permits", to: "/permits" },
+  { label: "Manage" },
+]);
+assert.deepEqual(
+  buildPermitsBreadcrumbs("/permits/manage/abc", [
+    { label: "Hot Work Permit" },
+  ]),
+  [
+    { label: "Permits", to: "/permits" },
+    { label: "Manage", to: "/permits/manage" },
+    { label: "Hot Work Permit" },
+  ],
+);
+assert.deepEqual(buildPermitsBreadcrumbs("/permits/settings"), [
+  { label: "Permits", to: "/permits" },
+  { label: "Settings" },
+]);
+assert.deepEqual(buildPermitsBreadcrumbs("/permits/runs/run-1"), [
+  { label: "Permits", to: "/permits" },
+  { label: "Records" },
+]);
+assert.equal(
+  pathMatches({ pathname: "/permits/manage/abc", hash: "" }, "/permits/manage"),
+  true,
+);
+
 
 const adminNav = buildNavItems({
   signedIn: true,

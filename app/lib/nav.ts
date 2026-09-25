@@ -103,6 +103,57 @@ export function findNavGroup(items: NavItem[], id: string) {
   );
 }
 
+export type BreadcrumbCrumb = {
+  label: string;
+  to?: string;
+};
+
+function permitsSectionCrumb(pathname: string): BreadcrumbCrumb | null {
+  if (pathname.startsWith("/permits/dashboard")) {
+    return { label: "Dashboard", to: "/permits/dashboard" };
+  }
+  if (
+    pathname.startsWith("/permits/history") ||
+    pathname.startsWith("/permits/runs")
+  ) {
+    return { label: "Records", to: "/permits/history" };
+  }
+  if (pathname.startsWith("/permits/manage")) {
+    return { label: "Manage", to: "/permits/manage" };
+  }
+  if (pathname.startsWith("/permits/settings")) {
+    return { label: "Settings", to: "/permits/settings" };
+  }
+  if (pathname === "/permits" || pathname.startsWith("/permits/")) {
+    return { label: "Forms", to: "/permits" };
+  }
+  return null;
+}
+
+/**
+ * Breadcrumb trail for /permits pages: Permits › section page [› trail…].
+ * The last crumb is always the current page (no `to`).
+ */
+export function buildPermitsBreadcrumbs(
+  pathname: string,
+  trail: BreadcrumbCrumb[] = [],
+): BreadcrumbCrumb[] {
+  const crumbs: BreadcrumbCrumb[] = [{ label: "Permits", to: "/permits" }];
+  const section = permitsSectionCrumb(pathname);
+  if (section) {
+    crumbs.push(section);
+  }
+  for (const crumb of trail) {
+    crumbs.push(crumb);
+  }
+
+  return crumbs.map((crumb, index) =>
+    index === crumbs.length - 1
+      ? { label: crumb.label }
+      : { label: crumb.label, to: crumb.to },
+  );
+}
+
 export function buildNavItems({
   signedIn,
   canReview,
