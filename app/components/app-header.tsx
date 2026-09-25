@@ -270,7 +270,7 @@ export function AppHeader({ user, pendingCount = 0 }: Props) {
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/80 bg-white/95 backdrop-blur-sm">
-      <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6 sm:py-4">
+      <div className="app-frame flex items-center justify-between gap-3 py-3 sm:py-4">
         <Link to="/" className="group flex min-w-0 items-center gap-3">
           <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-brand-navy p-1.5 shadow-sm transition-transform group-hover:scale-[1.02]">
             <SolenisMark className="size-full" />

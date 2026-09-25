@@ -185,7 +185,7 @@ export default function InspectionSubmissionPage({
   return (
     <div className="app-shell">
       <AppHeader user={user} pendingCount={pendingCount} />
-      <main className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 sm:py-14">
+      <main className="app-main">
         <div className="mb-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <Badge variant="secondary">Inspection</Badge>

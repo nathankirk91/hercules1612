@@ -145,7 +145,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
   return (
     <div className="app-shell">
       <AppHeader user={user} pendingCount={pendingCount} />
-      <main className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 sm:py-14">
+      <main className="app-main">
         <section className="mb-10 max-w-2xl animate-in fade-in slide-in-from-bottom-2 duration-500">
           <h1 className="font-heading text-4xl font-semibold tracking-tight text-brand-navy sm:text-5xl">
             {APP_NAME}

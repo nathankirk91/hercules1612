@@ -391,7 +391,7 @@ export default function PermitsManageDetailPage({
   return (
     <div className="app-shell">
       <AppHeader user={user} pendingCount={pendingCount} />
-      <main className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6 sm:py-14">
+      <main className="app-main">
         <PermitsSectionChrome
           user={user}
           pendingCount={pendingCount}

@@ -49,7 +49,7 @@ export default function PolymerAn04AdipicDetaPage({
         user={loaderData.user}
         pendingCount={loaderData.pendingCount}
       />
-      <main className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 sm:py-14">
+      <main className="app-main">
         <div className="mb-8 animate-in fade-in slide-in-from-bottom-2 duration-500">
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <Badge variant="secondary">Polymer</Badge>

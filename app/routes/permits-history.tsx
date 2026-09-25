@@ -49,7 +49,7 @@ export default function PermitsHistoryPage({
   return (
     <div className="app-shell">
       <AppHeader user={user} pendingCount={pendingCount} />
-      <main className="mx-auto w-full max-w-4xl px-4 py-10 sm:px-6 sm:py-14">
+      <main className="app-main">
         <PermitsSectionChrome user={user} pendingCount={pendingCount} />
         <div className="mb-8">
           <h1 className="font-heading text-3xl font-semibold tracking-tight">

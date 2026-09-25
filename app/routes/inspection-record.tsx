@@ -117,7 +117,7 @@ export default function InspectionRecordPage({
   return (
     <div className="app-shell">
       <AppHeader user={user} pendingCount={pendingCount} />
-      <main className="mx-auto w-full max-w-3xl px-4 py-10 sm:px-6 sm:py-14">
+      <main className="app-main">
         <div className="mb-8">
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <Badge variant="secondary">{definition.category}</Badge>

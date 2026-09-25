@@ -195,4 +195,13 @@
       ),
       linear-gradient(180deg, #ffffff 0%, var(--brand-mist) 55%, #eceef0 100%);
   }
+
+  /* Shared content width — matches header so section nav does not jump. */
+  .app-frame {
+    @apply mx-auto w-full max-w-6xl px-4 sm:px-6;
+  }
+
+  .app-main {
+    @apply mx-auto w-full max-w-6xl px-4 py-10 sm:px-6 sm:py-14;
+  }
 }
