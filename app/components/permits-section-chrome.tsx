@@ -89,20 +89,20 @@ export function PermitsSectionChrome({
 
       <NavigationMenu
         viewport={false}
-        className="max-w-none justify-start"
+        className="max-w-none justify-start overflow-x-auto overscroll-x-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         aria-label="Permits section"
       >
-        <NavigationMenuList className="h-auto w-full flex-wrap justify-start gap-0 border-b border-border/70">
+        <NavigationMenuList className="h-auto w-max min-w-full flex-nowrap justify-start gap-0 border-b border-border/70">
           {permitsGroup.children.map((child) => {
             const active = pathMatches(location, child.to);
             return (
-              <NavigationMenuItem key={child.to}>
+              <NavigationMenuItem key={child.to} className="shrink-0">
                 <NavigationMenuLink
                   asChild
                   active={active}
                   className={cn(
                     navigationMenuTriggerStyle(),
-                    "rounded-none border-b-2 border-transparent bg-transparent px-3 text-muted-foreground shadow-none hover:bg-transparent hover:text-brand-navy focus:bg-transparent focus:text-brand-navy data-active:border-brand-navy data-active:bg-transparent data-active:text-brand-navy data-active:hover:bg-transparent data-active:focus:bg-transparent",
+                    "rounded-none border-b-2 border-transparent bg-transparent px-2.5 text-sm text-muted-foreground shadow-none hover:bg-transparent hover:text-brand-navy focus:bg-transparent focus:text-brand-navy data-active:border-brand-navy data-active:bg-transparent data-active:text-brand-navy data-active:hover:bg-transparent data-active:focus:bg-transparent sm:px-3",
                   )}
                 >
                   <Link to={child.to}>{child.label}</Link>
