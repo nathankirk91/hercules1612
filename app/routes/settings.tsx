@@ -29,7 +29,7 @@ import {
   notificationPreferenceSchema,
   preferenceRowsFromEnabledTypes,
 } from "~/lib/notification-preferences";
-import { removePushDeviceSchema } from "~/lib/push-devices";
+import { removePushDeviceSchema, testPushDeviceSchema } from "~/lib/push-devices";
 import {
   deletePushSubscriptionById,
   getVapidPublicKey,
@@ -139,33 +139,52 @@ export async function action({ request }: Route.ActionArgs) {
     };
   }
 
-  if (intent !== "test-push") {
-    return data({ error: "Unknown action." }, { status: 400 });
-  }
+  if (intent === "test-push") {
+    const submission = parseWithZod(formData, {
+      schema: testPushDeviceSchema,
+    });
 
-  const result = await notifyUserPush(user.id, {
-    title: `${APP_NAME} test`,
-    message: "Push notifications are working on this device.",
-    url: `${getAppBaseUrl(request)}/settings`,
-    tag: `test-${user.id}-${Date.now()}`,
-  });
+    if (submission.status !== "success") {
+      return data(
+        {
+          error:
+            "Could not identify this device. Enable push on this device first, then try again.",
+          lastResult: submission.reply(),
+        },
+        { status: submission.status === "error" ? 400 : 200 },
+      );
+    }
 
-  if (result.sent === 0) {
-    return data(
+    const result = await notifyUserPush(
+      user.id,
       {
-        error:
-          result.reason === "No push subscriptions"
-            ? "Enable push on this device first, then try again."
-            : result.reason || "Could not send a test notification.",
+        title: `${APP_NAME} test`,
+        message: "Push notifications are working on this device.",
+        url: `${getAppBaseUrl(request)}/settings`,
+        tag: `test-${user.id}-${Date.now()}`,
       },
-      { status: 400 },
+      { endpoint: submission.value.endpoint },
     );
+
+    if (result.sent === 0) {
+      return data(
+        {
+          error:
+            result.reason === "No push subscriptions"
+              ? "Enable push on this device first, then try again."
+              : result.reason || "Could not send a test notification.",
+        },
+        { status: 400 },
+      );
+    }
+
+    return {
+      ok: true as const,
+      message: "Test notification sent to this device.",
+    };
   }
 
-  return {
-    ok: true as const,
-    message: `Test notification sent to ${result.sent} device${result.sent === 1 ? "" : "s"}.`,
-  };
+  return data({ error: "Unknown action." }, { status: 400 });
 }
 
 export default function SettingsPage({
@@ -218,6 +237,7 @@ export default function SettingsPage({
               <ManagerPushSetup
                 vapidPublicKey={vapidPublicKey}
                 initiallySubscribed={pushSubscribed}
+                devices={devices}
                 testResult={
                   actionData &&
                   "message" in actionData &&

@@ -2,10 +2,15 @@ import { useEffect, useState } from "react";
 import { Form, useNavigation, useRevalidator } from "react-router";
 
 import { Button } from "~/components/ui/button";
+import {
+  findPushDeviceByEndpoint,
+  type PushDeviceSummary,
+} from "~/lib/push-devices";
 
 type Props = {
   vapidPublicKey: string | null;
   initiallySubscribed: boolean;
+  devices: PushDeviceSummary[];
   testResult?: string | null;
   testError?: string | null;
 };
@@ -59,7 +64,7 @@ async function registerServiceWorker() {
 /**
  * Prefer Client Hints when available; otherwise a short platform + browser label.
  */
-function detectClientDeviceName(): string {
+export function detectClientDeviceName(): string {
   const uaData = (
     navigator as Navigator & {
       userAgentData?: {
@@ -110,6 +115,7 @@ function detectClientDeviceName(): string {
 export function ManagerPushSetup({
   vapidPublicKey,
   initiallySubscribed,
+  devices,
   testResult,
   testError,
 }: Props) {
@@ -122,11 +128,23 @@ export function ManagerPushSetup({
   const [status, setStatus] = useState<Status>("loading");
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [currentEndpoint, setCurrentEndpoint] = useState<string | null>(null);
+  const [detectedDeviceName, setDetectedDeviceName] = useState<string | null>(
+    null,
+  );
+
+  const registeredDevice = findPushDeviceByEndpoint(devices, currentEndpoint);
+  const thisDeviceName =
+    registeredDevice?.deviceName ?? detectedDeviceName ?? "This device";
 
   useEffect(() => {
     let cancelled = false;
 
     async function init() {
+      if (typeof window !== "undefined") {
+        setDetectedDeviceName(detectClientDeviceName());
+      }
+
       if (!vapidPublicKey) {
         if (!cancelled) {
           setStatus("unsupported");
@@ -192,6 +210,7 @@ export function ManagerPushSetup({
         const registration = await navigator.serviceWorker.ready;
         const existing = await registration.pushManager.getSubscription();
         if (!cancelled) {
+          setCurrentEndpoint(existing?.endpoint ?? null);
           setStatus(existing || initiallySubscribed ? "subscribed" : "ready");
           setMessage(
             permission === "default"
@@ -263,6 +282,9 @@ export function ManagerPushSetup({
         await new Promise((resolve) => setTimeout(resolve, 300));
       }
 
+      const deviceName = detectClientDeviceName();
+      setDetectedDeviceName(deviceName);
+
       const subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
@@ -273,7 +295,7 @@ export function ManagerPushSetup({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...subscription.toJSON(),
-          deviceName: detectClientDeviceName(),
+          deviceName,
         }),
       });
 
@@ -284,6 +306,7 @@ export function ManagerPushSetup({
         throw new Error(payload?.error || "Could not save subscription.");
       }
 
+      setCurrentEndpoint(subscription.endpoint);
       setStatus("subscribed");
       setMessage(
         "Permission granted. This device will receive the alert types you selected below.",
@@ -316,6 +339,7 @@ export function ManagerPushSetup({
         });
         await subscription.unsubscribe();
       }
+      setCurrentEndpoint(null);
       setStatus("ready");
       setMessage("Push notifications disabled on this device.");
       revalidator.revalidate();
@@ -344,9 +368,31 @@ export function ManagerPushSetup({
       <div>
         <h2 className="font-medium">Phone push notifications</h2>
         <p className="mt-1 text-sm text-muted-foreground">
-              Enable on this phone or computer, then use Send test notification
-              to confirm it works. Alert types are chosen below.
+          Enable on this phone or computer, then use Send test notification to
+          confirm it works on this device only. Alert types are chosen below.
         </p>
+      </div>
+
+      <div className="rounded-md border border-border/70 bg-muted/30 px-3 py-2.5">
+        <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+          This device
+        </p>
+        <p className="mt-0.5 font-medium" data-testid="current-device-name">
+          {thisDeviceName}
+        </p>
+        {status === "subscribed" && registeredDevice ? (
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Registered for push on this account
+          </p>
+        ) : status === "subscribed" ? (
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Push enabled on this browser
+          </p>
+        ) : (
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Name used when you enable notifications here
+          </p>
+        )}
       </div>
 
       {status === "needs-install" ? (
@@ -382,11 +428,15 @@ export function ManagerPushSetup({
               {busy ? "Updating…" : "Disable on this device"}
             </Button>
             <Form method="post">
+              <input type="hidden" name="intent" value="test-push" />
+              <input
+                type="hidden"
+                name="endpoint"
+                value={currentEndpoint ?? ""}
+              />
               <Button
                 type="submit"
-                name="intent"
-                value="test-push"
-                disabled={busy || isTesting}
+                disabled={busy || isTesting || !currentEndpoint}
               >
                 {isTesting ? "Sending…" : "Send test notification"}
               </Button>

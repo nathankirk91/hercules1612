@@ -1,6 +1,8 @@
+import { useEffect, useState } from "react";
 import { useFetcher } from "react-router";
 
 import { Alert, AlertDescription } from "~/components/ui/alert";
+import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { formatMelbourneDateTime } from "~/lib/datetime";
 import type { PushDeviceSummary } from "~/lib/push-devices";
@@ -16,8 +18,39 @@ type Props = {
   devices: PushDeviceSummary[];
 };
 
+async function readCurrentPushEndpoint(): Promise<string | null> {
+  if (
+    typeof window === "undefined" ||
+    !("serviceWorker" in navigator) ||
+    !("PushManager" in window)
+  ) {
+    return null;
+  }
+
+  try {
+    const registration = await navigator.serviceWorker.ready;
+    const subscription = await registration.pushManager.getSubscription();
+    return subscription?.endpoint ?? null;
+  } catch {
+    return null;
+  }
+}
+
 export function NotificationDevicesList({ devices }: Props) {
   const fetcher = useFetcher<RemoveDeviceResult>();
+  const [currentEndpoint, setCurrentEndpoint] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void readCurrentPushEndpoint().then((endpoint) => {
+      if (!cancelled) {
+        setCurrentEndpoint(endpoint);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [devices]);
 
   const removingId =
     fetcher.state !== "idle"
@@ -64,13 +97,20 @@ export function NotificationDevicesList({ devices }: Props) {
           {visibleDevices.map((device) => {
             const registeredAt = formatMelbourneDateTime(device.createdAt);
             const isRemoving = removingId === device.id;
+            const isCurrent =
+              currentEndpoint != null && device.endpoint === currentEndpoint;
             return (
               <li
                 key={device.id}
                 className="flex items-start justify-between gap-3 rounded-md border border-border/70 px-3 py-2.5"
               >
                 <div className="min-w-0 flex-1">
-                  <p className="font-medium">{device.deviceName}</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-medium">{device.deviceName}</p>
+                    {isCurrent ? (
+                      <Badge variant="secondary">This device</Badge>
+                    ) : null}
+                  </div>
                   {registeredAt ? (
                     <p className="mt-0.5 text-xs text-muted-foreground">
                       Registered {registeredAt}

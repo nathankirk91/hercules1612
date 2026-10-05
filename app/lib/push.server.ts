@@ -139,6 +139,7 @@ export async function listUserPushDevices(
       id: true,
       deviceName: true,
       userAgent: true,
+      endpoint: true,
       createdAt: true,
       updatedAt: true,
     },
@@ -150,6 +151,7 @@ export async function listUserPushDevices(
       deviceName: row.deviceName,
       userAgent: row.userAgent,
     }),
+    endpoint: row.endpoint,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   }));
@@ -232,11 +234,13 @@ async function sendPushToSubscriptions(
 }
 
 /**
- * Send a push to one user's devices (used for Settings test notifications).
+ * Send a push to one subscription for a user (Settings test notification).
+ * When `endpoint` is set, only that device is targeted.
  */
 export async function notifyUserPush(
   userId: string,
   payload: PushPayload,
+  options: { endpoint: string },
 ): Promise<{ sent: number; failed: number; reason?: string }> {
   const config = configureWebPush();
   if (!config) {
@@ -248,11 +252,20 @@ export async function notifyUserPush(
     return { sent: 0, failed: 0, reason: "Database is not configured" };
   }
 
-  const subscriptions = await prisma.pushSubscription.findMany({
-    where: { userId },
+  const endpoint = options.endpoint.trim();
+  if (!endpoint) {
+    return { sent: 0, failed: 0, reason: "Missing push endpoint" };
+  }
+
+  const subscription = await prisma.pushSubscription.findFirst({
+    where: { userId, endpoint },
   });
 
-  return sendPushToSubscriptions(subscriptions, payload);
+  if (!subscription) {
+    return { sent: 0, failed: 0, reason: "No push subscriptions" };
+  }
+
+  return sendPushToSubscriptions([subscription], payload);
 }
 
 function subscribedToTypeFilter(type: NotificationTypeId) {
