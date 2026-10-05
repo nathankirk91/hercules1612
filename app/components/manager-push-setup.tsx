@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Form, useNavigation } from "react-router";
+import { Form, useNavigation, useRevalidator } from "react-router";
 
 import { Button } from "~/components/ui/button";
 
@@ -56,6 +56,57 @@ async function registerServiceWorker() {
   return navigator.serviceWorker.register("/sw.js");
 }
 
+/**
+ * Prefer Client Hints when available; otherwise a short platform + browser label.
+ */
+function detectClientDeviceName(): string {
+  const uaData = (
+    navigator as Navigator & {
+      userAgentData?: {
+        platform?: string;
+        brands?: Array<{ brand: string; version: string }>;
+        mobile?: boolean;
+      };
+    }
+  ).userAgentData;
+
+  if (uaData?.platform) {
+    const brand =
+      uaData.brands?.find(
+        (entry) =>
+          entry.brand &&
+          !/not.?a.?brand/i.test(entry.brand) &&
+          !/chromium/i.test(entry.brand),
+      )?.brand ??
+      uaData.brands?.find((entry) => entry.brand && !/not.?a.?brand/i.test(entry.brand))
+        ?.brand ??
+      "Browser";
+    const suffix = uaData.mobile ? " (mobile)" : "";
+    return `${brand} on ${uaData.platform}${suffix}`;
+  }
+
+  const ua = navigator.userAgent;
+  if (/iPhone/i.test(ua)) return "Safari on iPhone";
+  if (/iPad/i.test(ua)) return "Safari on iPad";
+  if (/Android/i.test(ua)) {
+    if (/Chrome\//i.test(ua)) return "Chrome on Android";
+    return "Browser on Android";
+  }
+  if (/Macintosh|Mac OS X/i.test(ua)) {
+    if (/Chrome\//i.test(ua) && !/Edg\//i.test(ua)) return "Chrome on Mac";
+    if (/Firefox\//i.test(ua)) return "Firefox on Mac";
+    if (/Safari\//i.test(ua)) return "Safari on Mac";
+    return "Browser on Mac";
+  }
+  if (/Windows/i.test(ua)) {
+    if (/Edg\//i.test(ua)) return "Edge on Windows";
+    if (/Chrome\//i.test(ua)) return "Chrome on Windows";
+    if (/Firefox\//i.test(ua)) return "Firefox on Windows";
+    return "Browser on Windows";
+  }
+  return "This device";
+}
+
 export function ManagerPushSetup({
   vapidPublicKey,
   initiallySubscribed,
@@ -63,6 +114,7 @@ export function ManagerPushSetup({
   testError,
 }: Props) {
   const navigation = useNavigation();
+  const revalidator = useRevalidator();
   const isTesting =
     navigation.state !== "idle" &&
     navigation.formData?.get("intent") === "test-push";
@@ -219,7 +271,10 @@ export function ManagerPushSetup({
       const response = await fetch("/push/subscribe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(subscription.toJSON()),
+        body: JSON.stringify({
+          ...subscription.toJSON(),
+          deviceName: detectClientDeviceName(),
+        }),
       });
 
       if (!response.ok) {
@@ -233,6 +288,7 @@ export function ManagerPushSetup({
       setMessage(
         "Permission granted. This device will receive the alert types you selected below.",
       );
+      revalidator.revalidate();
     } catch (error) {
       setStatus("error");
       setMessage(
@@ -262,6 +318,7 @@ export function ManagerPushSetup({
       }
       setStatus("ready");
       setMessage("Push notifications disabled on this device.");
+      revalidator.revalidate();
     } catch (error) {
       setStatus("error");
       setMessage(

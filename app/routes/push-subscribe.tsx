@@ -14,6 +14,7 @@ type SubscriptionBody = {
     p256dh?: string;
     auth?: string;
   };
+  deviceName?: string;
 };
 
 export async function action({ request }: Route.ActionArgs) {
@@ -57,6 +58,7 @@ export async function action({ request }: Route.ActionArgs) {
       p256dh,
       auth,
       userAgent: request.headers.get("user-agent"),
+      deviceName: body.deviceName,
     });
 
     return { ok: true as const };

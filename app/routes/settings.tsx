@@ -6,6 +6,7 @@ import type { Route } from "./+types/settings";
 import { APP_NAME, pageTitle } from "~/lib/brand";
 import { AppHeader } from "~/components/app-header";
 import { ManagerPushSetup } from "~/components/manager-push-setup";
+import { NotificationDevicesList } from "~/components/notification-devices-list";
 import { NotificationPreferencesForm } from "~/components/notification-preferences-form";
 import { Badge } from "~/components/ui/badge";
 import {
@@ -15,6 +16,7 @@ import {
   CardHeader,
   CardTitle,
 } from "~/components/ui/card";
+import { Separator } from "~/components/ui/separator";
 import { countPendingRuns } from "~/lib/approvals.server";
 import { getAppBaseUrl } from "~/lib/app-url.server";
 import { requireReviewer } from "~/lib/auth.server";
@@ -27,8 +29,11 @@ import {
   notificationPreferenceSchema,
   preferenceRowsFromEnabledTypes,
 } from "~/lib/notification-preferences";
+import { removePushDeviceSchema } from "~/lib/push-devices";
 import {
+  deletePushSubscriptionById,
   getVapidPublicKey,
+  listUserPushDevices,
   notifyUserPush,
   userHasPushSubscription,
 } from "~/lib/push.server";
@@ -45,15 +50,23 @@ export function meta({}: Route.MetaArgs) {
 
 export async function loader({ request }: Route.LoaderArgs) {
   const user = await requireReviewer(request, "/settings");
-  const [pendingCount, vapidPublicKey, pushSubscribed, preferences] =
+  const [pendingCount, vapidPublicKey, pushSubscribed, preferences, devices] =
     await Promise.all([
       countPendingRuns(),
       Promise.resolve(getVapidPublicKey()),
       userHasPushSubscription(user.id),
       getUserNotificationPreferences(user.id),
+      listUserPushDevices(user.id),
     ]);
 
-  return { user, pendingCount, vapidPublicKey, pushSubscribed, preferences };
+  return {
+    user,
+    pendingCount,
+    vapidPublicKey,
+    pushSubscribed,
+    preferences,
+    devices,
+  };
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -84,6 +97,44 @@ export async function action({ request }: Route.ActionArgs) {
     return {
       ok: true as const,
       message: "Notification preferences saved.",
+      lastResult: submission.reply(),
+    };
+  }
+
+  if (intent === "remove-device") {
+    const submission = parseWithZod(formData, {
+      schema: removePushDeviceSchema,
+    });
+
+    if (submission.status !== "success") {
+      return data(
+        {
+          error: "Could not remove that device.",
+          lastResult: submission.reply(),
+        },
+        { status: submission.status === "error" ? 400 : 200 },
+      );
+    }
+
+    const removed = await deletePushSubscriptionById({
+      userId: user.id,
+      subscriptionId: submission.value.subscriptionId,
+    });
+
+    if (!removed) {
+      return data(
+        {
+          error: "That device is not registered on this account.",
+          lastResult: submission.reply(),
+        },
+        { status: 404 },
+      );
+    }
+
+    return {
+      ok: true as const,
+      message: "Device removed. It will no longer receive push notifications.",
+      removedSubscriptionId: submission.value.subscriptionId,
       lastResult: submission.reply(),
     };
   }
@@ -121,8 +172,14 @@ export default function SettingsPage({
   loaderData,
   actionData,
 }: Route.ComponentProps) {
-  const { user, pendingCount, vapidPublicKey, pushSubscribed, preferences } =
-    loaderData;
+  const {
+    user,
+    pendingCount,
+    vapidPublicKey,
+    pushSubscribed,
+    preferences,
+    devices,
+  } = loaderData;
 
   return (
     <div className="app-shell">
@@ -152,11 +209,12 @@ export default function SettingsPage({
             <CardHeader>
               <CardTitle>Notifications</CardTitle>
               <CardDescription>
-                Enable this device, then choose which event types to receive.
-                Preferences are stored on your account, not per phone.
+                Enable this device, review registered phones and computers, then
+                choose which event types to receive. Preferences are stored on
+                your account, not per phone.
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="grid gap-6">
               <ManagerPushSetup
                 vapidPublicKey={vapidPublicKey}
                 initiallySubscribed={pushSubscribed}
@@ -175,6 +233,8 @@ export default function SettingsPage({
                     : null
                 }
               />
+              <Separator />
+              <NotificationDevicesList devices={devices} />
             </CardContent>
           </Card>
 

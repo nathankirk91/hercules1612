@@ -1,8 +1,10 @@
 import webpush from "web-push";
 
 import { getPrisma } from "~/lib/db.server";
+import { resolveDeviceName } from "~/lib/device-name";
 import { ensureDefaultNotificationPreferences } from "~/lib/notification-preferences.server";
 import type { NotificationTypeId } from "~/lib/notification-preferences";
+import type { PushDeviceSummary } from "~/lib/push-devices";
 
 export type PushPayload = {
   title: string;
@@ -49,11 +51,17 @@ export async function savePushSubscription(args: {
   p256dh: string;
   auth: string;
   userAgent?: string | null;
+  deviceName?: string | null;
 }) {
   const prisma = getPrisma();
   if (!prisma) {
     throw new Error("Database is not configured.");
   }
+
+  const deviceName = resolveDeviceName({
+    deviceName: args.deviceName,
+    userAgent: args.userAgent,
+  });
 
   const subscription = await prisma.pushSubscription.upsert({
     where: { endpoint: args.endpoint },
@@ -62,6 +70,7 @@ export async function savePushSubscription(args: {
       p256dh: args.p256dh,
       auth: args.auth,
       userAgent: args.userAgent ?? null,
+      deviceName,
     },
     create: {
       userId: args.userId,
@@ -69,6 +78,7 @@ export async function savePushSubscription(args: {
       p256dh: args.p256dh,
       auth: args.auth,
       userAgent: args.userAgent ?? null,
+      deviceName,
     },
   });
 
@@ -93,6 +103,56 @@ export async function deletePushSubscription(args: {
       endpoint: args.endpoint,
     },
   });
+}
+
+export async function deletePushSubscriptionById(args: {
+  userId: string;
+  subscriptionId: string;
+}): Promise<boolean> {
+  const prisma = getPrisma();
+  if (!prisma) {
+    throw new Error("Database is not configured.");
+  }
+
+  const result = await prisma.pushSubscription.deleteMany({
+    where: {
+      id: args.subscriptionId,
+      userId: args.userId,
+    },
+  });
+
+  return result.count > 0;
+}
+
+export async function listUserPushDevices(
+  userId: string,
+): Promise<PushDeviceSummary[]> {
+  const prisma = getPrisma();
+  if (!prisma) {
+    return [];
+  }
+
+  const rows = await prisma.pushSubscription.findMany({
+    where: { userId },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      deviceName: true,
+      userAgent: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  });
+
+  return rows.map((row) => ({
+    id: row.id,
+    deviceName: resolveDeviceName({
+      deviceName: row.deviceName,
+      userAgent: row.userAgent,
+    }),
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  }));
 }
 
 export async function userHasPushSubscription(userId: string): Promise<boolean> {
