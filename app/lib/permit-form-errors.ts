@@ -189,6 +189,25 @@ export function labelForPermitFormPath(
   return path;
 }
 
+/**
+ * The bottom "Permit could not be submitted" summary should appear only after
+ * a real submit attempt (client validation on submit, or a server reply/save
+ * failure) — not when Conform revalidates a single field on blur/input.
+ */
+export function shouldShowPermitSubmitSummary(args: {
+  formError?: string | null;
+  formStatus?: "error" | "success";
+  lastResult?: unknown;
+}): boolean {
+  if (args.formError?.trim()) {
+    return true;
+  }
+  if (args.formStatus === "error" || args.formStatus === "success") {
+    return true;
+  }
+  return args.lastResult != null;
+}
+
 export function listPermitFormIssues(args: {
   definition: InspectionDefinition;
   formError?: string | null;

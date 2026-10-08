@@ -6,6 +6,7 @@ const {
   labelForPermitFormPath,
   listPermitFormIssues,
   permitSaveErrorMessage,
+  shouldShowPermitSubmitSummary,
   withTransientRetry,
 } = await import("./permit-form-errors.ts");
 
@@ -111,6 +112,42 @@ const definition = {
   assert.equal(issues[0]?.path, "");
   assert.match(issues[0]?.messages[0] ?? "", /not a safety rejection/);
   assert.equal(issues[1]?.label, "End time");
+}
+
+{
+  // Blurring a date (or other field) must not open the form-level summary.
+  assert.equal(shouldShowPermitSubmitSummary({}), false);
+  assert.equal(
+    shouldShowPermitSubmitSummary({ formError: null, lastResult: null }),
+    false,
+  );
+  assert.equal(
+    shouldShowPermitSubmitSummary({ formError: "   ", lastResult: undefined }),
+    false,
+  );
+
+  // After a real submit attempt (client or server), the summary may show.
+  assert.equal(
+    shouldShowPermitSubmitSummary({ formStatus: "error" }),
+    true,
+  );
+  assert.equal(
+    shouldShowPermitSubmitSummary({ formStatus: "success" }),
+    true,
+  );
+  assert.equal(
+    shouldShowPermitSubmitSummary({
+      lastResult: { status: "error", error: { "": ["Enter an answer."] } },
+    }),
+    true,
+  );
+  assert.equal(
+    shouldShowPermitSubmitSummary({
+      formError:
+        "The permit passed checks but could not be stored. This is a save error, not a safety rejection. Try again.",
+    }),
+    true,
+  );
 }
 
 {

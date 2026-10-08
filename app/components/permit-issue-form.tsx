@@ -22,7 +22,10 @@ import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "~/components/ui/radio-group";
 import { Textarea } from "~/components/ui/textarea";
-import { listPermitFormIssues } from "~/lib/permit-form-errors";
+import {
+  listPermitFormIssues,
+  shouldShowPermitSubmitSummary,
+} from "~/lib/permit-form-errors";
 import { createPermitIssueFormSchema } from "~/lib/permit.schema";
 import {
   YES_NO_OPTIONS,
@@ -78,7 +81,10 @@ export function PermitIssueForm({
     onValidate({ formData }) {
       return parseWithZod(formData, { schema });
     },
-    shouldValidate: "onBlur",
+    // Validate on submit first so the form-level summary does not appear when
+    // a user merely blurs a field (e.g. date). After a submit attempt, revalidate
+    // on input so field-level errors stay responsive.
+    shouldValidate: "onSubmit",
     shouldRevalidate: "onInput",
     defaultValue: {
       equipmentRef: initialEquipmentRef ?? "",
@@ -87,12 +93,19 @@ export function PermitIssueForm({
   });
 
   const responseFields = fields.responses.getFieldset();
-  const issueItems = listPermitFormIssues({
-    definition,
+  const showSubmitSummary = shouldShowPermitSubmitSummary({
     formError,
-    formErrors: form.errors,
-    allErrors: form.allErrors,
+    formStatus: form.status,
+    lastResult,
   });
+  const issueItems = showSubmitSummary
+    ? listPermitFormIssues({
+        definition,
+        formError,
+        formErrors: form.errors,
+        allErrors: form.allErrors,
+      })
+    : [];
   const issueKey = issueItems
     .map((issue) => `${issue.path}:${issue.messages.join("|")}`)
     .join(";");
