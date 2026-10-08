@@ -443,20 +443,29 @@ assert.equal(buildRecordFilename(["", null]), "record.pdf");
     .filter((block) => block.kind === "signatures")
     .map((block) => block.title);
   assert.deepEqual(signatureTitles, [
-    "Authorized personnel",
+    "Authorized Personnel Performing Work",
     "Authorization",
     "Close-out initials",
   ]);
 
   const personnel = doc.blocks.find(
     (block) =>
-      block.kind === "signatures" && block.title === "Authorized personnel",
+      block.kind === "signatures" &&
+      block.title === "Authorized Personnel Performing Work",
   );
   assert.equal(personnel.signatures.length, 2);
-  assert.equal(personnel.signatures[0].label, "Authorized person (required sign-off)");
+  assert.equal(personnel.signatures[0].label, "Authorized person");
   assert.equal(personnel.signatures[0].name, "Alex Operator");
   assert.equal(personnel.signatures[0].imageDataUrl, SAMPLE_SIGNATURE);
   assert.equal(personnel.signatures[1].unsigned, true);
+
+  const closeoutFields = doc.blocks.find(
+    (block) => block.kind === "fields" && block.title === "Permit close-out",
+  );
+  assert.deepEqual(
+    closeoutFields.fields.map((field) => field.label),
+    ["Close-out date", "Close-out time"],
+  );
 
   const auth = doc.blocks.find(
     (block) => block.kind === "signatures" && block.title === "Authorization",
@@ -485,7 +494,7 @@ assert.equal(buildRecordFilename(["", null]), "record.pdf");
   assert.match(text, /Safe Work Permit/);
   assert.match(text, /2608002/);
   assert.match(text, /Work to be performed/);
-  assert.match(text, /Authorized personnel/);
+  assert.match(text, /Authorized Personnel Performing Work/);
   assert.match(text, /Operations representative/);
   assert.match(text, /Safe work coordinator/);
   assert.match(text, /Not signed/);

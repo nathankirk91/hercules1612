@@ -7,7 +7,6 @@ import { parseWithZod } from "@conform-to/zod/v4";
 import { useRef } from "react";
 import { Form, useNavigation } from "react-router";
 
-import { SignaturePad } from "~/components/signature-pad";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import {
@@ -83,13 +82,11 @@ export function PermitIssueForm({
     shouldRevalidate: "onInput",
     defaultValue: {
       equipmentRef: initialEquipmentRef ?? "",
-      authorizedPersonnel: [{ name: "", signature: "" }],
       responses: defaultResponses,
     },
   });
 
   const responseFields = fields.responses.getFieldset();
-  const personnelFields = fields.authorizedPersonnel.getFieldList();
   const issueItems = listPermitFormIssues({
     definition,
     formError,
@@ -107,9 +104,9 @@ export function PermitIssueForm({
         <CardHeader>
           <CardTitle>Issue permit</CardTitle>
           <CardDescription>
-            Complete the checks and authorized personnel (technicians,
-            contractors, or visitors). Duration is calculated from start and end
-            time (max 12 hours). The permit opens after{" "}
+            Complete the permit details and checks. Duration is calculated from
+            start and end time (max 12 hours). Authorized personnel sign later on
+            the permit record (often the next day). The permit opens after{" "}
             {definition.requiredSignerCount === 3
               ? "all three authorisation signatures"
               : "two different people sign off"}
@@ -350,107 +347,6 @@ export function PermitIssueForm({
                 </ul>
               </section>
             ))}
-
-            <section className="grid gap-3">
-              <div className="flex flex-wrap items-end justify-between gap-2">
-                <div>
-                  <h3 className="font-heading text-lg font-semibold text-brand-navy">
-                    Authorized personnel
-                  </h3>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    Technicians, contractors, and visitors authorised to perform
-                    the work. The first person must sign; additional signatures
-                    are optional.
-                  </p>
-                </div>
-                <Button
-                  type="submit"
-                  variant="outline"
-                  size="sm"
-                  {...form.insert.getButtonProps({
-                    name: fields.authorizedPersonnel.name,
-                    defaultValue: { name: "", signature: "" },
-                  })}
-                >
-                  Add person
-                </Button>
-              </div>
-              <div className="grid gap-4">
-                {personnelFields.map((field, index) => {
-                  const person = field.getFieldset();
-                  return (
-                    <div
-                      key={field.key}
-                      className="grid gap-3 rounded-lg border border-border/70 bg-background/40 p-4"
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <Label htmlFor={person.name.id}>
-                          {index === 0
-                            ? "Authorized person"
-                            : `Authorized person ${index + 1}`}
-                          {index === 0 ? (
-                            <span className="ml-1 text-destructive">*</span>
-                          ) : null}
-                        </Label>
-                        {personnelFields.length > 1 ? (
-                          <button
-                            type="submit"
-                            className="text-xs font-medium text-muted-foreground underline-offset-4 hover:underline"
-                            {...form.remove.getButtonProps({
-                              name: fields.authorizedPersonnel.name,
-                              index,
-                            })}
-                          >
-                            Remove
-                          </button>
-                        ) : null}
-                      </div>
-                      <Input
-                        id={person.name.id}
-                        name={person.name.name}
-                        key={person.name.key}
-                        defaultValue={
-                          typeof person.name.initialValue === "string"
-                            ? person.name.initialValue
-                            : ""
-                        }
-                        placeholder="Full name"
-                        aria-invalid={Boolean(person.name.errors)}
-                      />
-                      {person.name.errors ? (
-                        <p className="text-sm text-destructive">
-                          {person.name.errors.join(" ")}
-                        </p>
-                      ) : null}
-                      <div className="grid gap-2">
-                        <Label>
-                          Sign-off
-                          {index === 0 ? (
-                            <span className="ml-1 text-destructive">*</span>
-                          ) : (
-                            <span className="ml-1 font-normal text-muted-foreground">
-                              (optional)
-                            </span>
-                          )}
-                        </Label>
-                        <SignaturePad
-                          name={person.signature.name}
-                          id={person.signature.id}
-                          error={person.signature.errors?.join(" ")}
-                          onChange={(signature) => {
-                            form.update({
-                              name: person.signature.name,
-                              value: signature,
-                            });
-                            form.validate({ name: person.signature.name });
-                          }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
 
             {issueItems.length > 0 ? (
               <div

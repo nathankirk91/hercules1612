@@ -83,7 +83,7 @@ const definition = {
       ],
     },
     authorizedPersonnel: {
-      0: { signature: ["The first authorized person must sign off."] },
+      0: { signature: ["Sign-off is required."] },
     },
   });
   assert.equal(nested.length, 2);

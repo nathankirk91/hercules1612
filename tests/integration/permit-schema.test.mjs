@@ -2,12 +2,18 @@ import assert from "node:assert/strict";
 
 /**
  * Integration: permit issue schema validates checklist responses and
- * transforms applicable answers into a summary.
+ * transforms applicable answers into a summary. Authorized personnel and
+ * close-out are separate later steps.
  */
 const { SAFE_WORK_PERMIT } = await import("../../app/lib/inspections.ts");
 const {
+  AUTHORIZED_PERSONNEL_TITLE,
+  createAddAuthorizedPersonnelSchema,
+  createPermitCloseoutSchema,
   createPermitIssueSchema,
   formatPermitNumber,
+  isPermitCloseoutComplete,
+  mergePermitCloseout,
   parseAuthorizedPersonnel,
 } = await import("../../app/lib/permit.schema.ts");
 const { melbournePermitYearMonth } = await import(
@@ -63,6 +69,10 @@ function fillRequired(definition, overrides = {}) {
     melbournePermitYearMonth(new Date("2026-08-02T14:00:00.000Z")),
     "2608",
   );
+  assert.equal(
+    AUTHORIZED_PERSONNEL_TITLE,
+    "Authorized Personnel Performing Work",
+  );
 }
 
 {
@@ -98,16 +108,11 @@ function fillRequired(definition, overrides = {}) {
   const schema = createPermitIssueSchema(SAFE_WORK_PERMIT);
   const parsed = schema.safeParse({
     equipmentRef: "P-100",
-    authorizedPersonnel: [
-      { name: "Alex Operator", signature: SAMPLE_SIGNATURE },
-    ],
     responses: fillRequired(SAFE_WORK_PERMIT),
   });
   assert.equal(parsed.success, true);
   assert.equal(parsed.data.equipmentRef, "P-100");
-  assert.deepEqual(parsed.data.authorizedPersonnel, [
-    { name: "Alex Operator", signature: SAMPLE_SIGNATURE },
-  ]);
+  assert.deepEqual(parsed.data.authorizedPersonnel, []);
   assert.equal(parsed.data.summary.status, "PASSED");
   assert.ok(parsed.data.answers.length > 0);
   assert.equal(
@@ -129,9 +134,6 @@ function fillRequired(definition, overrides = {}) {
 
   const parsed = schema.safeParse({
     equipmentRef: "P-100",
-    authorizedPersonnel: [
-      { name: "Alex Operator", signature: SAMPLE_SIGNATURE },
-    ],
     responses,
   });
   assert.equal(parsed.success, false);
@@ -141,73 +143,6 @@ function fillRequired(definition, overrides = {}) {
   const schema = createPermitIssueSchema(SAFE_WORK_PERMIT);
   const parsed = schema.safeParse({
     equipmentRef: "P-100",
-    authorizedPersonnel: [{ name: "  ", signature: "" }],
-    responses: fillRequired(SAFE_WORK_PERMIT),
-  });
-  assert.equal(parsed.success, false);
-  assert.ok(
-    parsed.error.issues.some(
-      (issue) =>
-        Array.isArray(issue.path) && issue.path[0] === "authorizedPersonnel",
-    ),
-  );
-}
-
-{
-  const schema = createPermitIssueSchema(SAFE_WORK_PERMIT);
-  const missingSignature = schema.safeParse({
-    equipmentRef: "P-100",
-    authorizedPersonnel: [{ name: "Alex Operator", signature: "" }],
-    responses: fillRequired(SAFE_WORK_PERMIT),
-  });
-  assert.equal(missingSignature.success, false);
-  assert.ok(
-    missingSignature.error.issues.some(
-      (issue) =>
-        Array.isArray(issue.path) &&
-        issue.path[0] === "authorizedPersonnel" &&
-        issue.path[2] === "signature",
-    ),
-  );
-
-  const optionalSecond = schema.safeParse({
-    equipmentRef: "P-100",
-    authorizedPersonnel: [
-      { name: "Alex Operator", signature: SAMPLE_SIGNATURE },
-      { name: "Sam Helper", signature: "" },
-    ],
-    responses: fillRequired(SAFE_WORK_PERMIT),
-  });
-  assert.equal(optionalSecond.success, true);
-  assert.equal(optionalSecond.data.authorizedPersonnel.length, 2);
-  assert.equal(optionalSecond.data.authorizedPersonnel[1].signature, "");
-}
-
-{
-  const schema = createPermitIssueSchema(SAFE_WORK_PERMIT);
-  const hugeSignature = `data:image/jpeg;base64,${"A".repeat(250_001)}`;
-  const parsed = schema.safeParse({
-    equipmentRef: "P-100",
-    authorizedPersonnel: [
-      { name: "Alex Operator", signature: hugeSignature },
-    ],
-    responses: fillRequired(SAFE_WORK_PERMIT),
-  });
-  assert.equal(parsed.success, false);
-  assert.ok(
-    parsed.error.issues.some((issue) =>
-      String(issue.message).includes("too large to save"),
-    ),
-  );
-}
-
-{
-  const schema = createPermitIssueSchema(SAFE_WORK_PERMIT);
-  const parsed = schema.safeParse({
-    equipmentRef: "P-100",
-    authorizedPersonnel: [
-      { name: "Alex Operator", signature: SAMPLE_SIGNATURE },
-    ],
     responses: fillRequired(SAFE_WORK_PERMIT, {
       "safe-work-permit__start-time": "07:00",
       "safe-work-permit__end-time": "20:00",
@@ -219,6 +154,140 @@ function fillRequired(definition, overrides = {}) {
       String(issue.message).includes("12 hours"),
     ),
   );
+}
+
+{
+  const addSchema = createAddAuthorizedPersonnelSchema();
+  const ok = addSchema.safeParse({
+    intent: "add-authorized-personnel",
+    authorizedPersonnel: [
+      { name: "Alex Operator", signature: SAMPLE_SIGNATURE },
+      { name: "Sam Helper", signature: SAMPLE_SIGNATURE },
+    ],
+  });
+  assert.equal(ok.success, true);
+  assert.equal(ok.data.authorizedPersonnel.length, 2);
+
+  const missingSignature = addSchema.safeParse({
+    intent: "add-authorized-personnel",
+    authorizedPersonnel: [{ name: "Alex Operator", signature: "" }],
+  });
+  assert.equal(missingSignature.success, false);
+  assert.ok(
+    missingSignature.error.issues.some(
+      (issue) =>
+        Array.isArray(issue.path) &&
+        issue.path[0] === "authorizedPersonnel" &&
+        issue.path[2] === "signature",
+    ),
+  );
+
+  const missingName = addSchema.safeParse({
+    intent: "add-authorized-personnel",
+    authorizedPersonnel: [{ name: "  ", signature: SAMPLE_SIGNATURE }],
+  });
+  assert.equal(missingName.success, false);
+
+  const hugeSignature = `data:image/jpeg;base64,${"A".repeat(250_001)}`;
+  const tooLarge = addSchema.safeParse({
+    intent: "add-authorized-personnel",
+    authorizedPersonnel: [
+      { name: "Alex Operator", signature: hugeSignature },
+    ],
+  });
+  assert.equal(tooLarge.success, false);
+  assert.ok(
+    tooLarge.error.issues.some((issue) =>
+      String(issue.message).includes("too large to save"),
+    ),
+  );
+}
+
+{
+  assert.equal(
+    isPermitCloseoutComplete({
+      date: "2026-08-17",
+      time: "15:30",
+      operatorsInitials: SAMPLE_SIGNATURE,
+      maintenanceInitials: "",
+    }),
+    false,
+  );
+  assert.equal(
+    isPermitCloseoutComplete({
+      date: "2026-08-17",
+      time: "15:30",
+      operatorsInitials: SAMPLE_SIGNATURE,
+      maintenanceInitials: "JD",
+    }),
+    true,
+  );
+
+  const mergedPartial = mergePermitCloseout(null, {
+    date: "2026-08-17",
+    time: "15:30",
+    operatorsInitials: SAMPLE_SIGNATURE,
+  });
+  assert.deepEqual(mergedPartial, {
+    date: "2026-08-17",
+    time: "15:30",
+    operatorsInitials: SAMPLE_SIGNATURE,
+    maintenanceInitials: "",
+  });
+  assert.equal(isPermitCloseoutComplete(mergedPartial), false);
+
+  const mergedComplete = mergePermitCloseout(mergedPartial, {
+    date: "2026-08-17",
+    time: "16:00",
+    maintenanceInitials: "JD",
+  });
+  assert.deepEqual(mergedComplete, {
+    date: "2026-08-17",
+    time: "16:00",
+    operatorsInitials: SAMPLE_SIGNATURE,
+    maintenanceInitials: "JD",
+  });
+  assert.equal(isPermitCloseoutComplete(mergedComplete), true);
+
+  const operatorOnly = createPermitCloseoutSchema().safeParse({
+    intent: "closeout",
+    date: "2026-08-17",
+    time: "15:30",
+    operatorsInitials: SAMPLE_SIGNATURE,
+  });
+  assert.equal(operatorOnly.success, true);
+
+  const maintenanceOnly = createPermitCloseoutSchema({
+    date: "2026-08-17",
+    time: "15:30",
+    operatorsInitials: SAMPLE_SIGNATURE,
+    maintenanceInitials: "",
+  }).safeParse({
+    intent: "closeout",
+    date: "2026-08-17",
+    time: "16:00",
+    maintenanceInitials: "JD",
+  });
+  assert.equal(maintenanceOnly.success, true);
+
+  const missingRemaining = createPermitCloseoutSchema({
+    date: "2026-08-17",
+    time: "15:30",
+    operatorsInitials: SAMPLE_SIGNATURE,
+    maintenanceInitials: "",
+  }).safeParse({
+    intent: "closeout",
+    date: "2026-08-17",
+    time: "16:00",
+  });
+  assert.equal(missingRemaining.success, false);
+
+  const neither = createPermitCloseoutSchema().safeParse({
+    intent: "closeout",
+    date: "2026-08-17",
+    time: "15:30",
+  });
+  assert.equal(neither.success, false);
 }
 
 {
@@ -293,9 +362,6 @@ function fillRequired(definition, overrides = {}) {
 
   const ok = createPermitIssueSchema(customPermit).safeParse({
     equipmentRef: "P-200",
-    authorizedPersonnel: [
-      { name: "Alex Operator", signature: SAMPLE_SIGNATURE },
-    ],
     responses: {
       "q-date": "2026-08-17",
       "q-start": "08:00",
@@ -311,9 +377,6 @@ function fillRequired(definition, overrides = {}) {
 
   const tooLong = createPermitIssueSchema(customPermit).safeParse({
     equipmentRef: "P-200",
-    authorizedPersonnel: [
-      { name: "Alex Operator", signature: SAMPLE_SIGNATURE },
-    ],
     responses: {
       "q-date": "2026-08-17",
       "q-start": "07:00",

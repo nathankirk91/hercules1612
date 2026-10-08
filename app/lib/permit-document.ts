@@ -5,6 +5,7 @@ import {
   type InspectionAnswerRecord,
 } from "~/lib/inspections";
 import {
+  AUTHORIZED_PERSONNEL_TITLE,
   formatPermitDurationLabel,
   isPermitAuthSlotSigned,
   PERMIT_AUTH_SLOT_KEYS,
@@ -114,23 +115,20 @@ export function buildPermitDocument(
 
   blocks.push({
     kind: "signatures",
-    title: "Authorized personnel",
+    title: AUTHORIZED_PERSONNEL_TITLE,
     description:
-      "Technicians, contractors, and visitors authorised to perform the work. The first person must sign; additional signatures are optional.",
+      "Technicians, contractors, and visitors authorised to perform the work. Added on the permit record after issue; each person signs when added.",
     signatures:
       run.authorizedPersonnel.length > 0
-        ? run.authorizedPersonnel.map((person, index) => ({
-            label:
-              index === 0
-                ? "Authorized person (required sign-off)"
-                : "Authorized person",
+        ? run.authorizedPersonnel.map((person) => ({
+            label: "Authorized person",
             name: person.name,
             imageDataUrl: person.signature,
             unsigned: !person.signature?.trim(),
           }))
         : [
             {
-              label: "Authorized personnel",
+              label: AUTHORIZED_PERSONNEL_TITLE,
               unsigned: true,
             },
           ],
@@ -180,17 +178,6 @@ export function buildPermitDocument(
         {
           label: "Close-out time",
           value: emptyFieldValue(run.closeout.time),
-        },
-        {
-          label: "Closed",
-          value: emptyFieldValue(
-            [
-              formatMelbourneDateTime(run.closedAt),
-              run.closedByName?.trim(),
-            ]
-              .filter(Boolean)
-              .join(" · "),
-          ),
         },
       ],
     });

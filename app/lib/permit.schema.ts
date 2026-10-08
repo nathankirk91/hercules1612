@@ -132,9 +132,13 @@ export const MAX_PERMIT_DURATION_HOURS = 12;
 
 export type AuthorizedPerson = {
   name: string;
-  /** Initials / signature data URL. Required for the first person. */
+  /** Initials / signature data URL. Required when the person is added. */
   signature: string;
 };
+
+/** Section title for people authorised to perform the work. */
+export const AUTHORIZED_PERSONNEL_TITLE =
+  "Authorized Personnel Performing Work";
 
 /** Normalize a permit number prefix to exactly two uppercase A–Z letters, or empty. */
 export function normalizePermitNumberPrefix(
@@ -303,24 +307,6 @@ export function createPermitIssueFormSchema(definition: InspectionDefinition) {
           .max(80, "Keep the reference under 80 characters.")
           .optional(),
       ),
-      authorizedPersonnel: z
-        .array(
-          z.object({
-            name: z.preprocess(
-              emptyToUndefined,
-              z
-                .string()
-                .trim()
-                .max(120, "Keep each name under 120 characters.")
-                .optional(),
-            ),
-            signature: z.preprocess(
-              emptyToUndefined,
-              z.string().optional(),
-            ),
-          }),
-        )
-        .default([]),
       responses: z.object(buildResponseShape(definition)),
     })
     .superRefine((value, ctx) => {
@@ -331,48 +317,6 @@ export function createPermitIssueFormSchema(definition: InspectionDefinition) {
           path: ["equipmentRef"],
         });
       }
-
-      const first = value.authorizedPersonnel[0];
-      const firstName = first?.name?.trim() ?? "";
-      const firstSignature = first?.signature?.trim() ?? "";
-      if (!firstName) {
-        ctx.addIssue({
-          code: "custom",
-          message:
-            "Add at least one authorized person (technician, contractor, or visitor).",
-          path: ["authorizedPersonnel", 0, "name"],
-        });
-      }
-      if (!firstSignature) {
-        ctx.addIssue({
-          code: "custom",
-          message: "The first authorized person must sign off.",
-          path: ["authorizedPersonnel", 0, "signature"],
-        });
-      }
-
-      value.authorizedPersonnel.forEach((person, index) => {
-        const name = person.name?.trim() ?? "";
-        const signature = person.signature?.trim() ?? "";
-        if (signature.length > MAX_PERMIT_SIGNATURE_LENGTH) {
-          ctx.addIssue({
-            code: "custom",
-            message:
-              "That signature is too large to save. Clear it and sign again with a simpler mark.",
-            path: ["authorizedPersonnel", index, "signature"],
-          });
-        }
-        if (index === 0) {
-          return;
-        }
-        if (!name && signature) {
-          ctx.addIssue({
-            code: "custom",
-            message: "Enter a name for this signature.",
-            path: ["authorizedPersonnel", index, "name"],
-          });
-        }
-      });
 
       const applicableQuestions = filterQuestionsForContext(
         definition.questions,
@@ -461,21 +405,76 @@ export function createPermitIssueSchema(definition: InspectionDefinition) {
       responses,
     );
     const summary = summarizeInspectionAnswers(answers);
-    const authorizedPersonnel: AuthorizedPerson[] = value.authorizedPersonnel
-      .map((person) => ({
-        name: person.name?.trim() ?? "",
-        signature: person.signature?.trim() ?? "",
-      }))
-      .filter((person) => person.name);
 
     return {
       equipmentRef: value.equipmentRef ?? null,
-      authorizedPersonnel,
+      authorizedPersonnel: [] as AuthorizedPerson[],
       responses,
       answers,
       summary,
     };
   });
+}
+
+/** Add one or more authorized people (name + sign-off) after issue. */
+export function createAddAuthorizedPersonnelSchema() {
+  return z
+    .object({
+      intent: z.literal("add-authorized-personnel"),
+      authorizedPersonnel: z
+        .array(
+          z.object({
+            name: z.preprocess(
+              emptyToUndefined,
+              z
+                .string({ error: "Enter a name." })
+                .trim()
+                .min(1, "Enter a name.")
+                .max(120, "Keep each name under 120 characters.")
+                .optional(),
+            ),
+            signature: z.preprocess(
+              emptyToUndefined,
+              z.string({ error: "Sign-off is required." }).optional(),
+            ),
+          }),
+        )
+        .min(1, "Add at least one authorized person."),
+    })
+    .superRefine((value, ctx) => {
+      value.authorizedPersonnel.forEach((person, index) => {
+        const name = person.name?.trim() ?? "";
+        const signature = person.signature?.trim() ?? "";
+        if (!name) {
+          ctx.addIssue({
+            code: "custom",
+            message: "Enter a name.",
+            path: ["authorizedPersonnel", index, "name"],
+          });
+        }
+        if (!signature) {
+          ctx.addIssue({
+            code: "custom",
+            message: "Sign-off is required.",
+            path: ["authorizedPersonnel", index, "signature"],
+          });
+        } else if (signature.length > MAX_PERMIT_SIGNATURE_LENGTH) {
+          ctx.addIssue({
+            code: "custom",
+            message:
+              "That signature is too large to save. Clear it and sign again with a simpler mark.",
+            path: ["authorizedPersonnel", index, "signature"],
+          });
+        }
+      });
+    })
+    .transform((value) => ({
+      intent: value.intent,
+      authorizedPersonnel: value.authorizedPersonnel.map((person) => ({
+        name: person.name?.trim() ?? "",
+        signature: person.signature?.trim() ?? "",
+      })),
+    }));
 }
 
 export function createPermitSignOffSchema(
@@ -515,28 +514,135 @@ export function createPermitSignOffSchema(
   });
 }
 
-export function createPermitCloseoutSchema() {
-  return z.object({
-    intent: z.literal("closeout").optional(),
-    date: z
-      .string({ error: "Enter the close-out date." })
-      .trim()
-      .regex(/^\d{4}-\d{2}-\d{2}$/, "Enter a valid date."),
-    time: z
-      .string({ error: "Enter the close-out time." })
-      .trim()
-      .regex(/^\d{2}:\d{2}$/, "Enter a valid 24-hour time."),
-    operatorsInitials: z
-      .string({ error: "Operators initials are required." })
-      .min(1, "Operators involved must initial the close-out."),
-    maintenanceInitials: z
-      .string({ error: "Maintenance initials are required." })
-      .min(1, "Maintenance personnel involved must initial the close-out."),
-  });
+export function isPermitCloseoutComplete(
+  closeout: PermitCloseout | null | undefined,
+): boolean {
+  return Boolean(
+    closeout?.date?.trim() &&
+      closeout?.time?.trim() &&
+      closeout?.operatorsInitials?.trim() &&
+      closeout?.maintenanceInitials?.trim(),
+  );
+}
+
+export function mergePermitCloseout(
+  existing: PermitCloseout | null | undefined,
+  incoming: {
+    date: string;
+    time: string;
+    operatorsInitials?: string;
+    maintenanceInitials?: string;
+  },
+): PermitCloseout {
+  return {
+    date: incoming.date.trim(),
+    time: incoming.time.trim(),
+    operatorsInitials:
+      existing?.operatorsInitials?.trim() ||
+      incoming.operatorsInitials?.trim() ||
+      "",
+    maintenanceInitials:
+      existing?.maintenanceInitials?.trim() ||
+      incoming.maintenanceInitials?.trim() ||
+      "",
+  };
+}
+
+/**
+ * Operator and maintenance initials may be captured in separate rounds.
+ * The permit closes only once both are present (see {@link isPermitCloseoutComplete}).
+ */
+export function createPermitCloseoutSchema(
+  existing?: PermitCloseout | null,
+) {
+  const hasOperators = Boolean(existing?.operatorsInitials?.trim());
+  const hasMaintenance = Boolean(existing?.maintenanceInitials?.trim());
+
+  return z
+    .object({
+      intent: z.literal("closeout").optional(),
+      date: z
+        .string({ error: "Enter the close-out date." })
+        .trim()
+        .regex(/^\d{4}-\d{2}-\d{2}$/, "Enter a valid date."),
+      time: z
+        .string({ error: "Enter the close-out time." })
+        .trim()
+        .regex(/^\d{2}:\d{2}$/, "Enter a valid 24-hour time."),
+      operatorsInitials: z.preprocess(
+        emptyToUndefined,
+        z.string().optional(),
+      ),
+      maintenanceInitials: z.preprocess(
+        emptyToUndefined,
+        z.string().optional(),
+      ),
+    })
+    .superRefine((value, ctx) => {
+      const submittingOperators = Boolean(value.operatorsInitials?.trim());
+      const submittingMaintenance = Boolean(
+        value.maintenanceInitials?.trim(),
+      );
+
+      if (hasOperators && hasMaintenance) {
+        ctx.addIssue({
+          code: "custom",
+          message: "This permit is already fully signed for close-out.",
+          path: ["operatorsInitials"],
+        });
+        return;
+      }
+
+      if (!hasOperators && !submittingOperators && !hasMaintenance && !submittingMaintenance) {
+        ctx.addIssue({
+          code: "custom",
+          message:
+            "Add operator or maintenance initials to record close-out progress.",
+          path: ["operatorsInitials"],
+        });
+        return;
+      }
+
+      // When one side is already done, the remaining side is required this round.
+      if (hasOperators && !hasMaintenance && !submittingMaintenance) {
+        ctx.addIssue({
+          code: "custom",
+          message: "Maintenance personnel involved must initial the close-out.",
+          path: ["maintenanceInitials"],
+        });
+      }
+      if (hasMaintenance && !hasOperators && !submittingOperators) {
+        ctx.addIssue({
+          code: "custom",
+          message: "Operators involved must initial the close-out.",
+          path: ["operatorsInitials"],
+        });
+      }
+
+      for (const [key, signature] of [
+        ["operatorsInitials", value.operatorsInitials] as const,
+        ["maintenanceInitials", value.maintenanceInitials] as const,
+      ]) {
+        if (
+          signature &&
+          signature.length > MAX_PERMIT_SIGNATURE_LENGTH
+        ) {
+          ctx.addIssue({
+            code: "custom",
+            message:
+              "That signature is too large to save. Clear it and sign again with a simpler mark.",
+            path: [key],
+          });
+        }
+      }
+    });
 }
 
 export type PermitIssueFormValues = z.infer<
   ReturnType<typeof createPermitIssueSchema>
+>;
+export type PermitAddAuthorizedPersonnelValues = z.infer<
+  ReturnType<typeof createAddAuthorizedPersonnelSchema>
 >;
 export type PermitCloseoutValues = z.infer<
   ReturnType<typeof createPermitCloseoutSchema>

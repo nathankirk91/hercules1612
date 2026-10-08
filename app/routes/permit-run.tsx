@@ -35,6 +35,8 @@ import {
   type InspectionAnswerRecord,
 } from "~/lib/inspections";
 import {
+  AUTHORIZED_PERSONNEL_TITLE,
+  createAddAuthorizedPersonnelSchema,
   createPermitCloseoutSchema,
   createPermitSignOffSchema,
   formatPermitDurationLabel,
@@ -43,8 +45,10 @@ import {
   PERMIT_AUTH_SLOT_LABELS,
   permitDurationMinutes,
   type PermitAuthSlotKey,
+  type PermitCloseout,
 } from "~/lib/permit.schema";
 import {
+  appendAuthorizedPersonnel,
   archivePermitRun,
   closePermitRun,
   getPermitRunById,
@@ -156,6 +160,7 @@ export async function action({ request, params }: Route.ActionArgs) {
     if (run.status !== "PENDING_AUTHORIZATION" && run.status !== "OPEN") {
       return data(
         {
+          intent: "sign-off" as const,
           error: "This permit cannot accept sign-off.",
           lastResult: null,
         },
@@ -172,7 +177,11 @@ export async function action({ request, params }: Route.ActionArgs) {
     });
     if (submission.status !== "success") {
       return data(
-        { lastResult: submission.reply(), error: null },
+        {
+          intent: "sign-off" as const,
+          lastResult: submission.reply(),
+          error: null,
+        },
         { status: submission.status === "error" ? 400 : 200 },
       );
     }
@@ -190,11 +199,60 @@ export async function action({ request, params }: Route.ActionArgs) {
     } catch (error) {
       return data(
         {
+          intent: "sign-off" as const,
           lastResult: submission.reply(),
           error:
             error instanceof Error
               ? error.message
               : "Could not save sign-off.",
+        },
+        { status: 400 },
+      );
+    }
+
+    throw redirect(`/permits/runs/${run.id}`);
+  }
+
+  if (intent === "add-authorized-personnel") {
+    if (run.status !== "PENDING_AUTHORIZATION" && run.status !== "OPEN") {
+      return data(
+        {
+          intent: "add-authorized-personnel" as const,
+          error: "This permit cannot accept authorized personnel.",
+          lastResult: null,
+        },
+        { status: 400 },
+      );
+    }
+
+    const submission = parseWithZod(formData, {
+      schema: createAddAuthorizedPersonnelSchema(),
+    });
+    if (submission.status !== "success") {
+      return data(
+        {
+          intent: "add-authorized-personnel" as const,
+          lastResult: submission.reply(),
+          error: null,
+        },
+        { status: submission.status === "error" ? 400 : 200 },
+      );
+    }
+
+    try {
+      await appendAuthorizedPersonnel({
+        permitRunId: run.id,
+        people: submission.value.authorizedPersonnel,
+      });
+    } catch (error) {
+      return data(
+        {
+          intent: "add-authorized-personnel" as const,
+          lastResult: submission.reply(),
+          error:
+            error instanceof Error
+              ? error.message
+              : "Could not add authorized personnel.",
         },
         { status: 400 },
       );
@@ -209,20 +267,26 @@ export async function action({ request, params }: Route.ActionArgs) {
   if (run.status !== "OPEN") {
     return data(
       {
+        intent: "closeout" as const,
         error: `Permit needs ${run.requiredSignerCount} different authorized signature${
           run.requiredSignerCount === 1 ? "" : "s"
         } before close-out.`,
+        lastResult: null,
       },
       { status: 400 },
     );
   }
 
   const submission = parseWithZod(formData, {
-    schema: createPermitCloseoutSchema(),
+    schema: createPermitCloseoutSchema(run.closeout),
   });
   if (submission.status !== "success") {
     return data(
-      { lastResult: submission.reply(), error: null },
+      {
+        intent: "closeout" as const,
+        lastResult: submission.reply(),
+        error: null,
+      },
       { status: submission.status === "error" ? 400 : 200 },
     );
   }
@@ -236,6 +300,7 @@ export async function action({ request, params }: Route.ActionArgs) {
   } catch (error) {
     return data(
       {
+        intent: "closeout" as const,
         lastResult: submission.reply(),
         error:
           error instanceof Error
@@ -247,6 +312,42 @@ export async function action({ request, params }: Route.ActionArgs) {
   }
 
   throw redirect(`/permits/runs/${run.id}`);
+}
+
+function actionIntent(
+  actionData: Route.ComponentProps["actionData"],
+): string | null {
+  if (!actionData || typeof actionData !== "object" || !("intent" in actionData)) {
+    return null;
+  }
+  const intent = (actionData as { intent?: unknown }).intent;
+  return typeof intent === "string" ? intent : null;
+}
+
+function actionError(
+  actionData: Route.ComponentProps["actionData"],
+): string | null {
+  if (!actionData || typeof actionData !== "object" || !("error" in actionData)) {
+    return null;
+  }
+  const error = (actionData as { error?: unknown }).error;
+  return typeof error === "string" ? error : null;
+}
+
+function actionLastResult(
+  actionData: Route.ComponentProps["actionData"],
+): SubmissionResult<string[]> | null {
+  if (
+    !actionData ||
+    typeof actionData !== "object" ||
+    !("lastResult" in actionData)
+  ) {
+    return null;
+  }
+  return (
+    (actionData as { lastResult?: SubmissionResult<string[]> | null })
+      .lastResult ?? null
+  );
 }
 
 export default function PermitRunPage({
@@ -266,6 +367,7 @@ export default function PermitRunPage({
   const isOpen = !isArchived && run.status === "OPEN";
   const isClosed = run.status === "CLOSED";
   const calculatedDuration = durationLabelFromAnswers(run.answers);
+  const intent = actionIntent(actionData);
 
   return (
     <div className="app-shell">
@@ -394,40 +496,41 @@ export default function PermitRunPage({
               ) : null}
 
               <div className="rounded-lg border border-border/70 bg-background/50 p-4">
-                <h3 className="font-medium">Authorized personnel</h3>
+                <h3 className="font-medium">{AUTHORIZED_PERSONNEL_TITLE}</h3>
                 <p className="mt-1 text-xs text-muted-foreground">
                   Technicians, contractors, and visitors authorised to perform
-                  the work. The first person must sign; additional signatures
-                  are optional.
+                  the work. Added after issue — often the next day — and more
+                  people can be added in later rounds.
                 </p>
-                <ul className="mt-3 grid gap-3">
-                  {run.authorizedPersonnel.map((person, index) => (
-                    <li
-                      key={`${person.name}-${index}`}
-                      className="rounded-md border border-border/60 bg-background/70 p-3"
-                    >
-                      <p className="text-sm font-medium text-foreground">
-                        {person.name}
-                        {index === 0 ? (
-                          <span className="ml-2 text-xs font-normal text-muted-foreground">
-                            (required sign-off)
-                          </span>
-                        ) : null}
-                      </p>
-                      {person.signature ? (
-                        <img
-                          src={person.signature}
-                          alt={`${person.name} sign-off`}
-                          className="mt-2 h-16 w-auto rounded border border-border/50 bg-white object-contain"
-                        />
-                      ) : (
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          No signature provided
+                {run.authorizedPersonnel.length > 0 ? (
+                  <ul className="mt-3 grid gap-3">
+                    {run.authorizedPersonnel.map((person, index) => (
+                      <li
+                        key={`${person.name}-${index}`}
+                        className="rounded-md border border-border/60 bg-background/70 p-3"
+                      >
+                        <p className="text-sm font-medium text-foreground">
+                          {person.name}
                         </p>
-                      )}
-                    </li>
-                  ))}
-                </ul>
+                        {person.signature ? (
+                          <img
+                            src={person.signature}
+                            alt={`${person.name} sign-off`}
+                            className="mt-2 h-16 w-auto rounded border border-border/50 bg-white object-contain"
+                          />
+                        ) : (
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            No signature provided
+                          </p>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-3 text-sm text-muted-foreground">
+                    No authorized personnel recorded yet.
+                  </p>
+                )}
               </div>
 
               <div className="grid gap-3">
@@ -465,17 +568,28 @@ export default function PermitRunPage({
             </CardContent>
           </Card>
 
+          {!isArchived && (isPending || isOpen) ? (
+            <AddAuthorizedPersonnelForm
+              lastResult={
+                intent === "add-authorized-personnel"
+                  ? actionLastResult(actionData)
+                  : null
+              }
+              error={
+                intent === "add-authorized-personnel"
+                  ? actionError(actionData)
+                  : null
+              }
+            />
+          ) : null}
+
           {signOffSlots.length > 0 ? (
             <SignOffForm
               slots={signOffSlots}
               lastResult={
-                actionData && "lastResult" in actionData
-                  ? actionData.lastResult
-                  : null
+                intent === "sign-off" ? actionLastResult(actionData) : null
               }
-              error={
-                actionData && "error" in actionData ? actionData.error : null
-              }
+              error={intent === "sign-off" ? actionError(actionData) : null}
             />
           ) : null}
 
@@ -521,14 +635,11 @@ export default function PermitRunPage({
 
           {isOpen ? (
             <CloseoutForm
+              existing={run.closeout}
               lastResult={
-                actionData && "lastResult" in actionData
-                  ? actionData.lastResult
-                  : null
+                intent === "closeout" ? actionLastResult(actionData) : null
               }
-              error={
-                actionData && "error" in actionData ? actionData.error : null
-              }
+              error={intent === "closeout" ? actionError(actionData) : null}
             />
           ) : null}
 
@@ -537,22 +648,23 @@ export default function PermitRunPage({
               <CardHeader>
                 <CardTitle>Permit close-out</CardTitle>
                 <CardDescription>
-                  Closed {run.closedAt ? formatMelbourneDateTime(run.closedAt) : ""}
-                  {run.closedByName ? ` · ${run.closedByName}` : ""}
-                  . Retain closed permits for at least one year.
+                  {run.closedByName
+                    ? `Closed by ${run.closedByName}. `
+                    : null}
+                  Retain closed permits for at least one year.
                 </CardDescription>
               </CardHeader>
               <CardContent className="grid gap-4">
                 <dl className="grid gap-3 sm:grid-cols-2">
                   <div>
                     <dt className="text-xs tracking-wide text-muted-foreground uppercase">
-                      Date
+                      Close-out date
                     </dt>
                     <dd className="text-sm font-medium">{run.closeout.date}</dd>
                   </div>
                   <div>
                     <dt className="text-xs tracking-wide text-muted-foreground uppercase">
-                      Time
+                      Close-out time
                     </dt>
                     <dd className="text-sm font-medium">{run.closeout.time}</dd>
                   </div>
@@ -592,12 +704,9 @@ export default function PermitRunPage({
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                {actionData &&
-                "intent" in actionData &&
-                actionData.intent === "archive-record" &&
-                actionData.error ? (
+                {intent === "archive-record" && actionError(actionData) ? (
                   <p className="mb-3 text-sm text-destructive">
-                    {actionData.error}
+                    {actionError(actionData)}
                   </p>
                 ) : null}
                 <Form method="post" className="grid gap-3">
@@ -624,6 +733,141 @@ export default function PermitRunPage({
         </div>
       </main>
     </div>
+  );
+}
+
+function AddAuthorizedPersonnelForm({
+  lastResult,
+  error,
+}: {
+  lastResult?: SubmissionResult<string[]> | null;
+  error?: string | null;
+}) {
+  const navigation = useNavigation();
+  const isSubmitting = navigation.state !== "idle";
+  const schema = createAddAuthorizedPersonnelSchema();
+  const [form, fields] = useForm({
+    lastResult: lastResult ?? undefined,
+    onValidate({ formData }) {
+      return parseWithZod(formData, { schema });
+    },
+    shouldValidate: "onBlur",
+    shouldRevalidate: "onInput",
+    defaultValue: {
+      intent: "add-authorized-personnel",
+      authorizedPersonnel: [{ name: "", signature: "" }],
+    },
+  });
+  const personnelFields = fields.authorizedPersonnel.getFieldList();
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{AUTHORIZED_PERSONNEL_TITLE}</CardTitle>
+        <CardDescription>
+          Add authorized people (technicians, contractors, or visitors) with
+          their sign-off. You can add more people in later rounds as work
+          progresses.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Form method="post" className="grid gap-4" {...getFormProps(form)}>
+          <input type="hidden" name="intent" value="add-authorized-personnel" />
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm text-muted-foreground">
+              Each person needs a name and sign-off.
+            </p>
+            <Button
+              type="submit"
+              variant="outline"
+              size="sm"
+              {...form.insert.getButtonProps({
+                name: fields.authorizedPersonnel.name,
+                defaultValue: { name: "", signature: "" },
+              })}
+            >
+              Add another
+            </Button>
+          </div>
+          <div className="grid gap-4">
+            {personnelFields.map((field, index) => {
+              const person = field.getFieldset();
+              return (
+                <div
+                  key={field.key}
+                  className="grid gap-3 rounded-lg border border-border/70 bg-background/40 p-4"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <Label htmlFor={person.name.id}>
+                      {personnelFields.length === 1
+                        ? "Authorized person"
+                        : `Authorized person ${index + 1}`}
+                      <span className="ml-1 text-destructive">*</span>
+                    </Label>
+                    {personnelFields.length > 1 ? (
+                      <button
+                        type="submit"
+                        className="text-xs font-medium text-muted-foreground underline-offset-4 hover:underline"
+                        {...form.remove.getButtonProps({
+                          name: fields.authorizedPersonnel.name,
+                          index,
+                        })}
+                      >
+                        Remove
+                      </button>
+                    ) : null}
+                  </div>
+                  <Input
+                    id={person.name.id}
+                    name={person.name.name}
+                    key={person.name.key}
+                    defaultValue={
+                      typeof person.name.initialValue === "string"
+                        ? person.name.initialValue
+                        : ""
+                    }
+                    placeholder="Full name"
+                    aria-invalid={Boolean(person.name.errors)}
+                  />
+                  {person.name.errors ? (
+                    <p className="text-sm text-destructive">
+                      {person.name.errors.join(" ")}
+                    </p>
+                  ) : null}
+                  <div className="grid gap-2">
+                    <Label>
+                      Sign-off
+                      <span className="ml-1 text-destructive">*</span>
+                    </Label>
+                    <SignaturePad
+                      name={person.signature.name}
+                      id={person.signature.id}
+                      error={person.signature.errors?.join(" ")}
+                      onChange={(signature) => {
+                        form.update({
+                          name: person.signature.name,
+                          value: signature,
+                        });
+                        form.validate({ name: person.signature.name });
+                      }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {error ? <p className="text-sm text-destructive">{error}</p> : null}
+          {form.errors ? (
+            <p className="text-sm text-destructive">{form.errors.join(" ")}</p>
+          ) : null}
+
+          <Button type="submit" disabled={isSubmitting} className="w-full sm:w-auto">
+            {isSubmitting ? "Saving…" : "Save authorized personnel"}
+          </Button>
+        </Form>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -751,36 +995,46 @@ function SignOffForm({
 }
 
 function CloseoutForm({
+  existing,
   lastResult,
   error,
 }: {
+  existing: PermitCloseout | null;
   lastResult?: SubmissionResult<string[]> | null;
   error?: string | null;
 }) {
   const navigation = useNavigation();
   const isSubmitting = navigation.state !== "idle";
+  const hasOperators = Boolean(existing?.operatorsInitials?.trim());
+  const hasMaintenance = Boolean(existing?.maintenanceInitials?.trim());
   const [form, fields] = useForm({
     lastResult: lastResult ?? undefined,
     onValidate({ formData }) {
-      return parseWithZod(formData, { schema: createPermitCloseoutSchema() });
+      return parseWithZod(formData, {
+        schema: createPermitCloseoutSchema(existing),
+      });
     },
     shouldValidate: "onBlur",
     shouldRevalidate: "onInput",
     defaultValue: {
-      date: "",
-      time: "",
+      date: existing?.date ?? "",
+      time: existing?.time ?? "",
       operatorsInitials: "",
       maintenanceInitials: "",
     },
   });
+
+  // When one side is already saved, this submit must complete the other and close.
+  const closingThisRound = hasOperators || hasMaintenance;
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Close out this permit</CardTitle>
         <CardDescription>
-          When Safe Work activities are complete, record the date, time, and
-          initials of the operator and maintenance personnel involved.
+          Record the close-out date and time. Operator and maintenance initials
+          can be captured at different times — the permit closes only when both
+          are complete.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -831,33 +1085,49 @@ function CloseoutForm({
 
           <div className="grid gap-2">
             <Label>Operators initials</Label>
-            <SignaturePad
-              name={fields.operatorsInitials.name}
-              id={fields.operatorsInitials.id}
-              error={fields.operatorsInitials.errors?.join(" ")}
-              onChange={(signature) => {
-                form.update({
-                  name: fields.operatorsInitials.name,
-                  value: signature,
-                });
-                form.validate({ name: fields.operatorsInitials.name });
-              }}
-            />
+            {hasOperators && existing?.operatorsInitials ? (
+              <img
+                src={existing.operatorsInitials}
+                alt="Operators initials"
+                className="h-20 w-auto rounded border border-border/50 bg-white object-contain"
+              />
+            ) : (
+              <SignaturePad
+                name={fields.operatorsInitials.name}
+                id={fields.operatorsInitials.id}
+                error={fields.operatorsInitials.errors?.join(" ")}
+                onChange={(signature) => {
+                  form.update({
+                    name: fields.operatorsInitials.name,
+                    value: signature,
+                  });
+                  form.validate({ name: fields.operatorsInitials.name });
+                }}
+              />
+            )}
           </div>
           <div className="grid gap-2">
             <Label>Maintenance initials</Label>
-            <SignaturePad
-              name={fields.maintenanceInitials.name}
-              id={fields.maintenanceInitials.id}
-              error={fields.maintenanceInitials.errors?.join(" ")}
-              onChange={(signature) => {
-                form.update({
-                  name: fields.maintenanceInitials.name,
-                  value: signature,
-                });
-                form.validate({ name: fields.maintenanceInitials.name });
-              }}
-            />
+            {hasMaintenance && existing?.maintenanceInitials ? (
+              <img
+                src={existing.maintenanceInitials}
+                alt="Maintenance initials"
+                className="h-20 w-auto rounded border border-border/50 bg-white object-contain"
+              />
+            ) : (
+              <SignaturePad
+                name={fields.maintenanceInitials.name}
+                id={fields.maintenanceInitials.id}
+                error={fields.maintenanceInitials.errors?.join(" ")}
+                onChange={(signature) => {
+                  form.update({
+                    name: fields.maintenanceInitials.name,
+                    value: signature,
+                  });
+                  form.validate({ name: fields.maintenanceInitials.name });
+                }}
+              />
+            )}
           </div>
 
           {error ? <p className="text-sm text-destructive">{error}</p> : null}
@@ -866,7 +1136,13 @@ function CloseoutForm({
           ) : null}
 
           <Button type="submit" disabled={isSubmitting} className="w-full sm:w-auto">
-            {isSubmitting ? "Closing…" : "Close permit"}
+            {isSubmitting
+              ? closingThisRound
+                ? "Closing…"
+                : "Saving…"
+              : closingThisRound
+                ? "Close permit"
+                : "Save close-out progress"}
           </Button>
         </Form>
       </CardContent>

@@ -33,7 +33,9 @@ import {
   emptyPermitAuthorization,
   formatPermitNumber,
   isPermitAuthSlotSigned,
+  isPermitCloseoutComplete,
   isPermitReadyToOpen,
+  mergePermitCloseout,
   normalizePermitNumberPrefix,
   normalizeRequiredSignerCount,
   parseAuthorizedPersonnel,
@@ -658,10 +660,72 @@ export async function signOffPermitSlot(args: {
   return detail;
 }
 
+export async function appendAuthorizedPersonnel(args: {
+  permitRunId: string;
+  people: AuthorizedPerson[];
+}): Promise<PermitRunDetail> {
+  await ensureInspectionSchema();
+  const prisma = getPrisma();
+  if (!prisma) {
+    throw new Error("Database is not configured.");
+  }
+
+  const people = args.people
+    .map((person) => ({
+      name: person.name.trim(),
+      signature: person.signature.trim(),
+    }))
+    .filter((person) => person.name && person.signature);
+  if (people.length === 0) {
+    throw new Error("Add at least one authorized person with sign-off.");
+  }
+
+  const existing = await prisma.permitRun.findUnique({
+    where: { id: args.permitRunId },
+    select: {
+      id: true,
+      status: true,
+      archivedAt: true,
+      authorizedPersonnel: true,
+    },
+  });
+  if (!existing) {
+    throw new Error("Permit not found.");
+  }
+  if (existing.archivedAt) {
+    throw new Error("Archived permits cannot accept authorized personnel.");
+  }
+  if (existing.status === "CLOSED") {
+    throw new Error("Closed permits cannot accept authorized personnel.");
+  }
+
+  const current = parseAuthorizedPersonnel(existing.authorizedPersonnel);
+  await prisma.permitRun.update({
+    where: { id: args.permitRunId },
+    data: {
+      authorizedPersonnel: [
+        ...current,
+        ...people,
+      ] as unknown as Prisma.InputJsonValue,
+    },
+  });
+
+  const detail = await getPermitRunById(args.permitRunId);
+  if (!detail) {
+    throw new Error("Permit not found after adding authorized personnel.");
+  }
+  return detail;
+}
+
 export async function closePermitRun(args: {
   permitRunId: string;
   closedById: string;
-  closeout: PermitCloseout;
+  closeout: {
+    date: string;
+    time: string;
+    operatorsInitials?: string;
+    maintenanceInitials?: string;
+  };
 }): Promise<PermitRunDetail> {
   await ensureInspectionSchema();
   const prisma = getPrisma();
@@ -671,7 +735,7 @@ export async function closePermitRun(args: {
 
   const existing = await prisma.permitRun.findUnique({
     where: { id: args.permitRunId },
-    select: { id: true, status: true, archivedAt: true },
+    select: { id: true, status: true, archivedAt: true, closeout: true },
   });
   if (!existing) {
     throw new Error("Permit not found.");
@@ -686,13 +750,23 @@ export async function closePermitRun(args: {
     throw new Error("Permit must be fully authorized before close-out.");
   }
 
+  const merged = mergePermitCloseout(
+    parseCloseout(existing.closeout),
+    args.closeout,
+  );
+  const complete = isPermitCloseoutComplete(merged);
+
   await prisma.permitRun.update({
     where: { id: args.permitRunId },
     data: {
-      status: "CLOSED",
-      closeout: args.closeout as unknown as Prisma.InputJsonValue,
-      closedAt: new Date(),
-      closedById: args.closedById,
+      closeout: merged as unknown as Prisma.InputJsonValue,
+      ...(complete
+        ? {
+            status: "CLOSED" as const,
+            closedAt: new Date(),
+            closedById: args.closedById,
+          }
+        : {}),
     },
   });
 
