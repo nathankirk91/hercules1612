@@ -73,6 +73,8 @@ export type PermitRunListItem = {
   closedAt: Date | null;
   submittedByName: string | null;
   attentionCount: number;
+  /** Count of Authorized Personnel Performing Work entries. */
+  authorizedPersonnelCount: number;
   archivedAt: Date | null;
   archiveReason: string | null;
 };
@@ -421,6 +423,7 @@ export async function listPermitRuns(args?: {
         closedAt: true,
         responses: true,
         summary: true,
+        authorizedPersonnel: true,
         archivedAt: true,
         archiveReason: true,
         inspection: { select: { id: true, title: true } },
@@ -447,6 +450,9 @@ export async function listPermitRuns(args?: {
         closedAt: row.closedAt,
         submittedByName: row.submittedBy?.name ?? row.submittedBy?.email ?? null,
         attentionCount: summary.attentionCount,
+        authorizedPersonnelCount: parseAuthorizedPersonnel(
+          row.authorizedPersonnel,
+        ).length,
         archivedAt: row.archivedAt,
         archiveReason: row.archiveReason,
       };
