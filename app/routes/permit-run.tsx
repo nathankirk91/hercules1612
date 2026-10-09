@@ -38,6 +38,8 @@ import {
 } from "~/lib/inspections";
 import {
   AUTHORIZED_PERSONNEL_TITLE,
+  authorizedPersonnelBlockedReason,
+  canAcceptAuthorizedPersonnel,
   createAddAuthorizedPersonnelSchema,
   createPermitCloseoutSchema,
   createPermitSignOffSchema,
@@ -216,11 +218,15 @@ export async function action({ request, params }: Route.ActionArgs) {
   }
 
   if (intent === "add-authorized-personnel") {
-    if (run.status !== "PENDING_AUTHORIZATION" && run.status !== "OPEN") {
+    const blocked = authorizedPersonnelBlockedReason({
+      status: run.status,
+      archivedAt: run.archivedAt,
+    });
+    if (blocked) {
       return data(
         {
           intent: "add-authorized-personnel" as const,
-          error: "This permit cannot accept authorized personnel.",
+          error: blocked,
           lastResult: null,
         },
         { status: 400 },
@@ -368,6 +374,10 @@ export default function PermitRunPage({
   const isPending = !isArchived && run.status === "PENDING_AUTHORIZATION";
   const isOpen = !isArchived && run.status === "OPEN";
   const isClosed = run.status === "CLOSED";
+  const showAddAuthorizedPersonnel = canAcceptAuthorizedPersonnel({
+    status: run.status,
+    archivedAt: run.archivedAt,
+  });
   const calculatedDuration = durationLabelFromAnswers(run.answers);
   const intent = actionIntent(actionData);
 
@@ -500,9 +510,11 @@ export default function PermitRunPage({
               <div className="rounded-lg border border-border/70 bg-background/50 p-4">
                 <h3 className="font-medium">{AUTHORIZED_PERSONNEL_TITLE}</h3>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Technicians, contractors, and visitors authorised to perform
-                  the work. Added after issue — often the next day — and more
-                  people can be added in later rounds.
+                  {showAddAuthorizedPersonnel
+                    ? "Technicians, contractors, and visitors authorised to perform the work. Added after issue — often the next day — and more people can be added in later rounds."
+                    : isClosed
+                      ? "Technicians, contractors, and visitors authorised to perform the work. This list is locked because the permit is closed."
+                      : "Technicians, contractors, and visitors authorised to perform the work."}
                 </p>
                 {run.authorizedPersonnel.length > 0 ? (
                   <ul className="mt-3 grid gap-3">
@@ -530,7 +542,9 @@ export default function PermitRunPage({
                   </ul>
                 ) : (
                   <p className="mt-3 text-sm text-muted-foreground">
-                    No authorized personnel recorded yet.
+                    {showAddAuthorizedPersonnel
+                      ? "No authorized personnel recorded yet."
+                      : "No authorized personnel recorded."}
                   </p>
                 )}
               </div>
@@ -570,7 +584,7 @@ export default function PermitRunPage({
             </CardContent>
           </Card>
 
-          {!isArchived && (isPending || isOpen) ? (
+          {showAddAuthorizedPersonnel ? (
             <AddAuthorizedPersonnelForm
               lastResult={
                 intent === "add-authorized-personnel"

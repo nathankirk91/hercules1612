@@ -140,6 +140,47 @@ export type AuthorizedPerson = {
 export const AUTHORIZED_PERSONNEL_TITLE =
   "Authorized Personnel Performing Work";
 
+export const AUTHORIZED_PERSONNEL_CLOSED_ERROR =
+  "Closed permits cannot accept authorized personnel.";
+
+export const AUTHORIZED_PERSONNEL_ARCHIVED_ERROR =
+  "Archived permits cannot accept authorized personnel.";
+
+export const AUTHORIZED_PERSONNEL_STATUS_ERROR =
+  "This permit cannot accept authorized personnel.";
+
+/**
+ * Authorized Personnel Performing Work can be added only while the permit is
+ * pending authorization or open (and not archived). Closed permits are locked.
+ */
+export function canAcceptAuthorizedPersonnel(args: {
+  status: "PENDING_AUTHORIZATION" | "OPEN" | "CLOSED";
+  archivedAt?: Date | string | null;
+}): boolean {
+  if (args.archivedAt) {
+    return false;
+  }
+  return (
+    args.status === "PENDING_AUTHORIZATION" || args.status === "OPEN"
+  );
+}
+
+export function authorizedPersonnelBlockedReason(args: {
+  status: "PENDING_AUTHORIZATION" | "OPEN" | "CLOSED";
+  archivedAt?: Date | string | null;
+}): string | null {
+  if (canAcceptAuthorizedPersonnel(args)) {
+    return null;
+  }
+  if (args.archivedAt) {
+    return AUTHORIZED_PERSONNEL_ARCHIVED_ERROR;
+  }
+  if (args.status === "CLOSED") {
+    return AUTHORIZED_PERSONNEL_CLOSED_ERROR;
+  }
+  return AUTHORIZED_PERSONNEL_STATUS_ERROR;
+}
+
 /** Normalize a permit number prefix to exactly two uppercase A–Z letters, or empty. */
 export function normalizePermitNumberPrefix(
   value: string | null | undefined,
