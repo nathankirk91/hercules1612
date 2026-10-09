@@ -5,38 +5,28 @@ import { DownloadPdfLink } from "~/components/download-pdf-link";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import { formatMelbourneDateTime } from "~/lib/datetime";
-import { permitRecordHeading, permitStatusLabel } from "~/lib/permit-display";
+import {
+  permitRecordHeading,
+  permitStatusBadges,
+} from "~/lib/permit-display";
 import type { PermitRunListItem } from "~/lib/permits.server";
-import { cn } from "~/lib/utils";
 
 type PermitRecordCardProps = {
   run: PermitRunListItem;
-  statusBadge?: {
-    label: string;
-    className: string;
-  };
 };
 
-export function PermitRecordCard({ run, statusBadge }: PermitRecordCardProps) {
+export function PermitRecordCard({ run }: PermitRecordCardProps) {
   const heading = permitRecordHeading({
     workDescription: run.workDescription,
     equipmentRef: run.equipmentRef,
     permitNumber: run.permitNumber,
   });
   const isArchived = Boolean(run.archivedAt);
-  const statusLabel =
-    statusBadge?.label ??
-    (isArchived ? "Archived" : permitStatusLabel(run.status));
-  const statusClassName =
-    statusBadge?.className ??
-    (isArchived
-      ? "border-muted-foreground/40 text-muted-foreground"
-      : cn(
-          run.status === "PENDING_AUTHORIZATION" &&
-            "border-sky-600/40 text-sky-800",
-          run.status === "OPEN" && "border-amber-600/40 text-amber-800",
-          run.status === "CLOSED" && "border-emerald-600/40 text-emerald-700",
-        ));
+  const statusBadges = permitStatusBadges({
+    status: run.status,
+    authorizedPersonnelCount: run.authorizedPersonnelCount,
+    archivedAt: run.archivedAt,
+  });
 
   const metaParts = [
     formatMelbourneDateTime(run.createdAt),
@@ -61,9 +51,15 @@ export function PermitRecordCard({ run, statusBadge }: PermitRecordCardProps) {
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <Badge variant="secondary">{run.title}</Badge>
-            <Badge variant="outline" className={statusClassName}>
-              {statusLabel}
-            </Badge>
+            {statusBadges.map((badge) => (
+              <Badge
+                key={badge.kind}
+                variant="outline"
+                className={badge.className}
+              >
+                {badge.label}
+              </Badge>
+            ))}
             {run.permitNumber ? (
               <Badge variant="outline" className="tabular-nums">
                 #{run.permitNumber}
