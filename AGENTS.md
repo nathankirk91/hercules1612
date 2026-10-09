@@ -20,7 +20,8 @@ Follow these rules for all work in this repository.
 
 ## Git workflow
 
-- Always work on the `main` branch.
-- Do **not** create new branches.
-- Do **not** create pull requests.
-- Commit and push changes directly to `main`.
+- Do **not** commit or push directly to `main`.
+- For every change set, create a new feature branch from the latest `main`.
+- Open a pull request into `main` so the change can be reviewed and tested (CI, staging, or local verification) before it reaches production.
+- Keep PRs focused on one change set; update the same PR with follow-up commits when iterating on the same work.
+- Merge to `main` only after the PR is ready and checks/review are satisfactory.
