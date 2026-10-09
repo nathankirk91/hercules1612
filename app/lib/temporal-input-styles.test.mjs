@@ -42,6 +42,10 @@ describe("temporal input stretch styles", () => {
     );
     assert.match(dateField, /Calendar/);
     assert.match(dateField, /Popover/);
+    assert.match(dateField, /Today/);
+    assert.match(dateField, /Tomorrow/);
+    assert.match(dateField, /todayYmd/);
+    assert.match(dateField, /tomorrowYmd/);
 
     const timeField = readFileSync(
       join(root, "app/components/time-picker-field.tsx"),

@@ -8,6 +8,8 @@ const {
   localDateToYmd,
   MINUTE_OPTIONS,
   parseHm,
+  todayYmd,
+  tomorrowYmd,
   ymdToLocalDate,
 } = await import("./temporal-fields.ts");
 
@@ -21,6 +23,16 @@ const {
   assert.equal(date.getDate(), 17);
   assert.equal(localDateToYmd(date), "2026-08-17");
   assert.equal(formatYmdDisplay("2026-08-17"), "17 Aug 2026");
+}
+
+{
+  const noon = new Date(2026, 7, 17, 12, 0, 0);
+  assert.equal(todayYmd(noon), "2026-08-17");
+  assert.equal(tomorrowYmd(noon), "2026-08-18");
+
+  // Month / year rollover
+  assert.equal(tomorrowYmd(new Date(2026, 0, 31, 9, 0, 0)), "2026-02-01");
+  assert.equal(tomorrowYmd(new Date(2026, 11, 31, 9, 0, 0)), "2027-01-01");
 }
 
 {

@@ -11,6 +11,8 @@ import {
 import {
   formatYmdDisplay,
   localDateToYmd,
+  todayYmd,
+  tomorrowYmd,
   ymdToLocalDate,
 } from "~/lib/temporal-fields";
 import { cn } from "~/lib/utils";
@@ -45,6 +47,11 @@ export function DatePickerField({
   const label = formatYmdDisplay(value);
   const invalid = ariaInvalid || Boolean(error);
 
+  const pickYmd = (next: string) => {
+    onChange?.(next);
+    setOpen(false);
+  };
+
   return (
     <div className={cn("grid gap-2", className)}>
       <input type="hidden" name={name} id={id} value={value} />
@@ -65,15 +72,33 @@ export function DatePickerField({
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-auto p-0" align="start">
+          <div className="flex gap-2 border-b border-border/70 p-2">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="flex-1"
+              onClick={() => pickYmd(todayYmd())}
+            >
+              Today
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="flex-1"
+              onClick={() => pickYmd(tomorrowYmd())}
+            >
+              Tomorrow
+            </Button>
+          </div>
           <Calendar
             mode="single"
             captionLayout="dropdown"
             selected={selected}
             defaultMonth={selected}
             onSelect={(date) => {
-              const next = date ? localDateToYmd(date) : "";
-              onChange?.(next);
-              setOpen(false);
+              pickYmd(date ? localDateToYmd(date) : "");
             }}
           />
         </PopoverContent>

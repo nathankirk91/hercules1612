@@ -48,6 +48,17 @@ export function localDateToYmd(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+/** Local civil date for "today" (or an injected clock for tests). */
+export function todayYmd(now: Date = new Date()): string {
+  return localDateToYmd(now);
+}
+
+/** Local civil date for the day after `now`. */
+export function tomorrowYmd(now: Date = new Date()): string {
+  const next = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  return localDateToYmd(next);
+}
+
 /** Human-readable date for picker triggers (en-AU). */
 export function formatYmdDisplay(value: string | null | undefined): string | null {
   const date = ymdToLocalDate(value);
