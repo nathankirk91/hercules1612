@@ -13,7 +13,9 @@ import type { Route } from "./+types/permit-run";
 import { pageTitle } from "~/lib/brand";
 import { AppHeader } from "~/components/app-header";
 import { DownloadPdfLink } from "~/components/download-pdf-link";
+import { DatePickerField } from "~/components/date-picker-field";
 import { SignaturePad } from "~/components/signature-pad";
+import { TimePickerField } from "~/components/time-picker-field";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import {
@@ -1043,43 +1045,51 @@ function CloseoutForm({
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="grid gap-2">
               <Label htmlFor={fields.date.id}>Close-out date</Label>
-              <Input
+              <DatePickerField
                 id={fields.date.id}
                 name={fields.date.name}
                 key={fields.date.key}
-                type="date"
-                defaultValue={
-                  typeof fields.date.initialValue === "string"
-                    ? fields.date.initialValue
-                    : ""
+                value={
+                  typeof fields.date.value === "string"
+                    ? fields.date.value
+                    : typeof fields.date.initialValue === "string"
+                      ? fields.date.initialValue
+                      : ""
                 }
                 aria-invalid={Boolean(fields.date.errors)}
+                error={fields.date.errors?.join(" ")}
+                onChange={(next) => {
+                  form.update({
+                    name: fields.date.name,
+                    value: next,
+                    validated: false,
+                  });
+                }}
               />
-              {fields.date.errors ? (
-                <p className="text-sm text-destructive">
-                  {fields.date.errors.join(" ")}
-                </p>
-              ) : null}
             </div>
             <div className="grid gap-2">
               <Label htmlFor={fields.time.id}>Close-out time</Label>
-              <Input
+              <TimePickerField
                 id={fields.time.id}
                 name={fields.time.name}
                 key={fields.time.key}
-                type="time"
-                defaultValue={
-                  typeof fields.time.initialValue === "string"
-                    ? fields.time.initialValue
-                    : ""
+                value={
+                  typeof fields.time.value === "string"
+                    ? fields.time.value
+                    : typeof fields.time.initialValue === "string"
+                      ? fields.time.initialValue
+                      : ""
                 }
                 aria-invalid={Boolean(fields.time.errors)}
+                error={fields.time.errors?.join(" ")}
+                onChange={(next) => {
+                  form.update({
+                    name: fields.time.name,
+                    value: next,
+                    validated: false,
+                  });
+                }}
               />
-              {fields.time.errors ? (
-                <p className="text-sm text-destructive">
-                  {fields.time.errors.join(" ")}
-                </p>
-              ) : null}
             </div>
           </div>
 

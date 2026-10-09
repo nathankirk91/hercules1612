@@ -21,4 +21,33 @@ describe("temporal input stretch styles", () => {
     assert.match(input, /temporalInputTypes/);
     assert.match(input, /\[&::-webkit-datetime-edit\]:w-full/);
   });
+
+  it("permit forms use ShadCN date and time picker fields", () => {
+    const issue = readFileSync(
+      join(root, "app/components/permit-issue-form.tsx"),
+      "utf8",
+    );
+    assert.match(issue, /DatePickerField/);
+    assert.match(issue, /TimePickerField/);
+    assert.equal(/type="date"/.test(issue), false);
+    assert.equal(/type="time"/.test(issue), false);
+
+    const run = readFileSync(join(root, "app/routes/permit-run.tsx"), "utf8");
+    assert.match(run, /DatePickerField/);
+    assert.match(run, /TimePickerField/);
+
+    const dateField = readFileSync(
+      join(root, "app/components/date-picker-field.tsx"),
+      "utf8",
+    );
+    assert.match(dateField, /Calendar/);
+    assert.match(dateField, /Popover/);
+
+    const timeField = readFileSync(
+      join(root, "app/components/time-picker-field.tsx"),
+      "utf8",
+    );
+    assert.match(timeField, /Select/);
+    assert.match(timeField, /HOUR_OPTIONS/);
+  });
 });

@@ -7,6 +7,8 @@ import { parseWithZod } from "@conform-to/zod/v4";
 import { useRef } from "react";
 import { Form, useNavigation } from "react-router";
 
+import { DatePickerField } from "~/components/date-picker-field";
+import { TimePickerField } from "~/components/time-picker-field";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import {
@@ -250,25 +252,37 @@ export function PermitIssueForm({
                             />
                           </div>
                         ) : question.type === "DATE" ? (
-                          <div className="mt-3">
-                            <Input
+                          <div className="mt-3 max-w-sm">
+                            <DatePickerField
                               id={fieldId}
                               name={fieldName}
                               key={fieldKey}
-                              type="date"
-                              defaultValue={value}
+                              value={value}
                               aria-invalid={Boolean(fieldErrors)}
+                              onChange={(next) => {
+                                form.update({
+                                  name: fieldName,
+                                  value: next,
+                                  validated: false,
+                                });
+                              }}
                             />
                           </div>
                         ) : question.type === "TIME" ? (
-                          <div className="mt-3">
-                            <Input
+                          <div className="mt-3 max-w-sm">
+                            <TimePickerField
                               id={fieldId}
                               name={fieldName}
                               key={fieldKey}
-                              type="time"
-                              defaultValue={value}
+                              value={value}
                               aria-invalid={Boolean(fieldErrors)}
+                              onChange={(next) => {
+                                form.update({
+                                  name: fieldName,
+                                  value: next,
+                                  validated: false,
+                                });
+                              }}
                             />
                           </div>
                         ) : question.type === "CHECKBOX" ? (
