@@ -146,8 +146,8 @@ export default function InspectionRecordPage({
           <CardHeader>
             <CardTitle>Sections</CardTitle>
             <CardDescription>
-              Complete an available section. Finished sections stay as they
-              were saved.
+              Complete an available section. Open a finished section to view
+              its saved report (read-only).
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -183,23 +183,25 @@ export default function InspectionRecordPage({
                         Open section
                       </Link>
                     </Button>
+                  ) : item.status === "complete" ? (
+                    <Button asChild size="sm" variant="outline">
+                      <Link to={`sections/${item.section.id}`}>
+                        View report
+                      </Link>
+                    </Button>
                   ) : (
                     <Badge
                       variant="outline"
                       className={cn(
-                        item.status === "complete" &&
-                          "border-emerald-600/40 text-emerald-700",
                         item.status === "skipped" &&
                           "border-muted-foreground/40",
                       )}
                     >
-                      {item.status === "complete"
-                        ? "Done"
-                        : item.status === "skipped"
-                          ? "Skipped"
-                          : item.status === "locked"
-                            ? "Locked"
-                            : "Open"}
+                      {item.status === "skipped"
+                        ? "Skipped"
+                        : item.status === "locked"
+                          ? "Locked"
+                          : "Open"}
                     </Badge>
                   )}
                 </li>

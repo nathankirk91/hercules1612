@@ -5,11 +5,15 @@ import type { Route } from "./+types/inspection-record-section";
 import { pageTitle } from "~/lib/brand";
 import { AppHeader } from "~/components/app-header";
 import { InspectionChecklistForm } from "~/components/inspection-checklist-form";
+import { InspectionSectionReport } from "~/components/inspection-section-report";
 import { Badge } from "~/components/ui/badge";
 import { countPendingRuns } from "~/lib/approvals.server";
 import { requireUser } from "~/lib/auth.server";
-import { completeInspectionSection } from "~/lib/inspection-record.server";
-import { getInspectionRecordDetail } from "~/lib/inspection-record.server";
+import {
+  completeInspectionSection,
+  getCompletedInspectionSectionReport,
+  getInspectionRecordDetail,
+} from "~/lib/inspection-record.server";
 import {
   definitionForSection,
   recordLabel,
@@ -35,7 +39,7 @@ export function meta({}: Route.MetaArgs) {
     { title: pageTitle("Inspection section") },
     {
       name: "description",
-      content: "Complete one section of this inspection record.",
+      content: "Complete or view one section of this inspection record.",
     },
   ];
 }
@@ -62,6 +66,31 @@ export async function loader({ request, params }: Route.LoaderArgs) {
   if (!item) {
     throw new Response("Section not found", { status: 404 });
   }
+
+  const pendingCount = canReviewRuns(user.role)
+    ? await countPendingRuns()
+    : 0;
+
+  if (item.status === "complete") {
+    const report = await getCompletedInspectionSectionReport({
+      definition,
+      runId: params.runId,
+      sectionId: params.sectionId,
+    });
+    if (!report) {
+      throw new Response("Section report not found", { status: 404 });
+    }
+    return {
+      mode: "view" as const,
+      user,
+      definition,
+      record,
+      sectionTitle: item.section.title,
+      pendingCount,
+      report,
+    };
+  }
+
   if (item.status !== "available") {
     throw redirect(
       `/inspections/${params.inspectionId}/records/${params.runId}`,
@@ -70,10 +99,9 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   const sectionDefinition = definitionForSection(definition, params.sectionId);
   const equipmentRef = record.equipmentRef;
-  const [operators, pendingCount, lastAnswersResult, openActions, firstOfWeek] =
+  const [operators, lastAnswersResult, openActions, firstOfWeek] =
     await Promise.all([
       listActiveOperators(),
-      canReviewRuns(user.role) ? countPendingRuns() : Promise.resolve(0),
       getLastAnswersForInspection({
         inspectionId: definition.id,
         equipmentRef,
@@ -92,6 +120,7 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     ]);
 
   return {
+    mode: "edit" as const,
     user,
     definition,
     sectionDefinition,
@@ -116,6 +145,26 @@ export async function action({ request, params }: Route.ActionArgs) {
     request,
     `/inspections/${params.inspectionId}/records/${params.runId}/sections/${params.sectionId}`,
   );
+
+  const record = await getInspectionRecordDetail({
+    runId: params.runId,
+    definition,
+  });
+  if (!record) {
+    throw new Response("Record not found", { status: 404 });
+  }
+  const item = record.progress.find(
+    (row) => row.section.id === params.sectionId,
+  );
+  if (!item || item.status !== "available") {
+    return data(
+      {
+        lastResult: null,
+        formError: "This section can no longer be edited.",
+      },
+      { status: 400 },
+    );
+  }
 
   const formData = await request.formData();
 
@@ -175,20 +224,7 @@ export default function InspectionRecordSectionPage({
   loaderData,
   actionData,
 }: Route.ComponentProps) {
-  const {
-    definition,
-    sectionDefinition,
-    record,
-    sectionTitle,
-    user,
-    operators,
-    pendingCount,
-    equipmentRef,
-    isFirstInspectionOfWeek,
-    lastAnswers,
-    lastRunAt,
-    openActions,
-  } = loaderData;
+  const { definition, record, sectionTitle, user, pendingCount } = loaderData;
 
   return (
     <div className="app-shell">
@@ -197,6 +233,14 @@ export default function InspectionRecordSectionPage({
         <div className="mb-8">
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <Badge variant="secondary">{sectionTitle}</Badge>
+            {loaderData.mode === "view" ? (
+              <Badge
+                variant="outline"
+                className="border-emerald-600/40 text-emerald-700"
+              >
+                Completed
+              </Badge>
+            ) : null}
             <Link
               to={`/inspections/${definition.slug}/records/${record.id}`}
               className="text-sm text-muted-foreground underline-offset-4 hover:underline"
@@ -208,24 +252,29 @@ export default function InspectionRecordSectionPage({
             {sectionTitle}
           </h1>
           <p className="mt-2 text-muted-foreground">
-            {definition.title}. First save wins — this section cannot be
-            jointly edited.
+            {loaderData.mode === "view"
+              ? `${definition.title}. Read-only report of the saved answers.`
+              : `${definition.title}. First save wins — this section cannot be jointly edited.`}
           </p>
         </div>
-        <InspectionChecklistForm
-          definition={sectionDefinition}
-          operators={operators}
-          selectedShift={record.shift}
-          equipmentRef={equipmentRef}
-          isFirstInspectionOfWeek={isFirstInspectionOfWeek}
-          lastAnswers={lastAnswers}
-          lastRunAt={lastRunAt}
-          openActions={openActions}
-          lastResult={actionData?.lastResult}
-          formError={actionData?.formError}
-          submitLabel="Save section"
-          hideResultCard
-        />
+        {loaderData.mode === "view" ? (
+          <InspectionSectionReport report={loaderData.report} />
+        ) : (
+          <InspectionChecklistForm
+            definition={loaderData.sectionDefinition}
+            operators={loaderData.operators}
+            selectedShift={record.shift}
+            equipmentRef={loaderData.equipmentRef}
+            isFirstInspectionOfWeek={loaderData.isFirstInspectionOfWeek}
+            lastAnswers={loaderData.lastAnswers}
+            lastRunAt={loaderData.lastRunAt}
+            openActions={loaderData.openActions}
+            lastResult={actionData?.lastResult}
+            formError={actionData?.formError}
+            submitLabel="Save section"
+            hideResultCard
+          />
+        )}
       </main>
     </div>
   );

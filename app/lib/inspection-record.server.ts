@@ -27,6 +27,10 @@ import {
   type SectionCompletion,
   type SectionProgressItem,
 } from "~/lib/inspection-workflow";
+import {
+  buildInspectionSectionReport,
+  type InspectionSectionReportView,
+} from "~/lib/inspection-section-report";
 import { createInspectionActions } from "~/lib/inspections.server";
 import { ensureInspectionSchema } from "~/lib/migrate.server";
 import { getActiveOperatorById } from "~/lib/operators.server";
@@ -318,6 +322,65 @@ export async function getInspectionRecordDetail(args: {
     ).length,
     total: progress.length,
   };
+}
+
+/** Read-only report for a completed section on an in-progress (or finished) record. */
+export async function getCompletedInspectionSectionReport(args: {
+  definition: InspectionDefinition;
+  runId: string;
+  sectionId: string;
+}): Promise<InspectionSectionReportView | null> {
+  await ensureInspectionSchema();
+  const prisma = getPrisma();
+  if (!prisma) {
+    return null;
+  }
+
+  const run = await prisma.inspectionRun.findUnique({
+    where: { id: args.runId },
+    select: {
+      id: true,
+      inspectionId: true,
+      status: true,
+      sectionCompletions: {
+        where: { sectionId: args.sectionId },
+        take: 1,
+        include: {
+          completedBy: { select: { name: true, email: true } },
+        },
+      },
+    },
+  });
+  if (!run || run.inspectionId !== args.definition.id) {
+    return null;
+  }
+  if (run.status === "VOIDED") {
+    return null;
+  }
+
+  const completion = run.sectionCompletions[0];
+  if (!completion || completion.status !== "COMPLETE") {
+    return null;
+  }
+
+  const section = resolveInspectionSections(args.definition).find(
+    (item) => item.id === args.sectionId,
+  );
+  if (!section) {
+    return null;
+  }
+
+  return buildInspectionSectionReport({
+    sectionTitle: section.title,
+    sectionDefinition: definitionForSection(args.definition, args.sectionId),
+    responses: completion.responses,
+    signature: completion.signature,
+    completedByName:
+      completion.completedBy?.name?.trim() ||
+      completion.completedBy?.email ||
+      null,
+    completedAt: completion.completedAt,
+  });
 }
 
 export async function completeInspectionSection(args: {
