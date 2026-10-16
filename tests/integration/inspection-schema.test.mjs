@@ -30,7 +30,6 @@ function sectionSignaturesFor(questions, value = "JD") {
 
 function basePayload(responses, questions = []) {
   return {
-    operatorId: "op-1",
     equipmentRef: "H57168",
     notes: "",
     actions: [],
@@ -298,11 +297,28 @@ const unitQuestions = filterQuestionsForEquipment(
     sections: [],
   });
   const formData = new FormData();
-  formData.set("operatorId", "op-1");
   formData.set("actions.0", "");
   const parsed = parseWithZod(formData, { schema });
   assert.equal(parsed.status, "success");
   assert.deepEqual(parsed.value?.actions, []);
+}
+
+{
+  // Creator/filler is assigned server-side from the session user — not a form field.
+  const schema = createInspectionFormSchema({
+    ...FORKLIFT_DAILY_CHECK_TEMPLATE,
+    questions: [],
+    sections: [],
+  });
+  const formData = new FormData();
+  formData.set("notes", "no operator picker");
+  const parsed = parseWithZod(formData, { schema });
+  assert.equal(parsed.status, "success");
+  assert.equal(
+    parsed.value && "operatorId" in parsed.value,
+    false,
+    "operatorId must not be part of the inspection form schema",
+  );
 }
 
 {
@@ -312,7 +328,6 @@ const unitQuestions = filterQuestionsForEquipment(
     sections: [],
   });
   const parsed = schema.safeParse({
-    operatorId: "op-1",
     notes: "",
     actions: { 0: "Follow up on spill kit" },
     sectionSignatures: {},
@@ -320,6 +335,11 @@ const unitQuestions = filterQuestionsForEquipment(
   });
   assert.equal(parsed.success, true);
   assert.deepEqual(parsed.data.actions, ["Follow up on spill kit"]);
+  assert.equal(
+    parsed.data && "operatorId" in parsed.data,
+    false,
+    "submit transform must not expose operatorId",
+  );
 }
 
 {
@@ -353,14 +373,12 @@ const unitQuestions = filterQuestionsForEquipment(
     ],
   });
   const dotNotation = new FormData();
-  dotNotation.set("operatorId", "op-1");
   dotNotation.set("responses.q1", "Yes");
   dotNotation.set("sectionSignatures.sec-env", "data:image/jpeg;base64,abc");
   const dotParsed = parseWithZod(dotNotation, { schema });
   assert.equal(dotParsed.status, "success");
 
   const bracketNotation = new FormData();
-  bracketNotation.set("operatorId", "op-1");
   bracketNotation.set("responses.q1", "Yes");
   bracketNotation.set("sectionSignatures[sec-env]", "data:image/jpeg;base64,abc");
   const bracketParsed = parseWithZod(bracketNotation, { schema });

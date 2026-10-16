@@ -15,7 +15,6 @@ import {
   isFirstInspectionOfWeek,
 } from "~/lib/inspections.server";
 import { ensureInspectionSchema } from "~/lib/migrate.server";
-import { getActiveOperatorById } from "~/lib/operators.server";
 import { notifyManagersPush } from "~/lib/push.server";
 import type { AuthUser } from "~/lib/user.server";
 
@@ -71,23 +70,6 @@ export async function handleInspectionSubmit(args: {
     );
   }
 
-  const operator = await getActiveOperatorById(submission.value.operatorId);
-  if (!operator) {
-    return data(
-      {
-        summary: null,
-        runId: null,
-        status: null,
-        lastResult: submission.reply({
-          fieldErrors: {
-            operatorId: ["Select a valid operator."],
-          },
-        }),
-      } satisfies InspectionSubmitActionData,
-      { status: 400 },
-    );
-  }
-
   const { answers, summary, equipmentRef, notes, signature, sectionSignatures, actions } =
     submission.value;
 
@@ -97,7 +79,7 @@ export async function handleInspectionSubmit(args: {
     await ensureInspectionSchema();
     const run = await createInspectionRun({
       inspectionId: definition.id,
-      operatorUserId: operator.id,
+      operatorUserId: user.id,
       submittedById: user.id,
       equipmentRef,
       notes,
@@ -145,12 +127,13 @@ export async function handleInspectionSubmit(args: {
   }
 
   const url = `${getAppBaseUrl(request)}/inspections/submissions/${runId}`;
+  const creatorLabel = user.name?.trim() || user.email;
 
   if (summary.status === "NEEDS_ATTENTION") {
     const pushResult = await notifyManagersPush(
       {
         title: "Inspection needs attention",
-        message: `${definition.shortName}: ${summary.attentionCount} item(s) (${operator.name})`,
+        message: `${definition.shortName}: ${summary.attentionCount} item(s) (${creatorLabel})`,
         url,
         tag: `inspection-${runId}`,
       },
@@ -169,7 +152,7 @@ export async function handleInspectionSubmit(args: {
           createdActionCount === 1
             ? "New inspection action"
             : "New inspection actions",
-        message: `${definition.shortName}: ${createdActionCount} open action${createdActionCount === 1 ? "" : "s"} (${operator.name})`,
+        message: `${definition.shortName}: ${createdActionCount} open action${createdActionCount === 1 ? "" : "s"} (${creatorLabel})`,
         url,
         tag: `inspection-actions-${runId}`,
       },
