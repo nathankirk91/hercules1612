@@ -8,9 +8,10 @@ const {
 const { createInspectionSchema } = await import(
   "../../app/lib/inspection.schema.ts"
 );
-const { buildInspectionSectionReport } = await import(
-  "../../app/lib/inspection-section-report.ts"
-);
+const {
+  buildInspectionSectionReport,
+  packSectionResponses,
+} = await import("../../app/lib/inspection-section-report.ts");
 
 const before = {
   id: "sec-before",
@@ -107,12 +108,15 @@ const definition = {
 }
 
 {
-  // Completed sections expose a read-only report from saved responses.
+  // Completed sections expose a read-only report from saved responses + notes.
   const sectionOnly = definitionForSection(definition, "sec-before");
   const report = buildInspectionSectionReport({
     sectionTitle: "Before start",
     sectionDefinition: sectionOnly,
-    responses: { "q-tag": "No" },
+    responses: packSectionResponses({
+      answers: { "q-tag": "No" },
+      notes: "Checked with supervisor",
+    }),
     signature: "data:image/png;base64,sig",
     completedByName: "Sam",
     completedAt: "2026-10-16T02:00:00.000Z",
@@ -120,6 +124,7 @@ const definition = {
   assert.equal(report.answers.length, 1);
   assert.equal(report.answers[0].answer, "No");
   assert.equal(report.answers[0].flagged, false);
+  assert.equal(report.notes, "Checked with supervisor");
   assert.equal(report.signature, "data:image/png;base64,sig");
   assert.equal(report.completedByName, "Sam");
 }

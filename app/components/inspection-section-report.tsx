@@ -58,6 +58,15 @@ export function InspectionSectionReport({ report }: Props) {
           </ul>
         )}
 
+        {report.notes ? (
+          <div className="border-t border-border/60 pt-3">
+            <p className="text-sm font-medium">Notes</p>
+            <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">
+              {report.notes}
+            </p>
+          </div>
+        ) : null}
+
         {report.signature ? (
           <div className="border-t border-border/60 pt-3">
             <p className="text-sm font-medium">

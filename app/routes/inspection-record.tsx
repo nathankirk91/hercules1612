@@ -142,6 +142,22 @@ export default function InspectionRecordPage({
           </p>
         </div>
 
+        {record.notes?.trim() ? (
+          <Card className="mb-4">
+            <CardHeader>
+              <CardTitle>Notes</CardTitle>
+              <CardDescription>
+                Notes saved while completing sections on this record.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="whitespace-pre-wrap text-sm text-muted-foreground">
+                {record.notes.trim()}
+              </p>
+            </CardContent>
+          </Card>
+        ) : null}
+
         <Card>
           <CardHeader>
             <CardTitle>Sections</CardTitle>

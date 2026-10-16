@@ -36,6 +36,19 @@ assert.match(
   "section route must render the read-only section report",
 );
 
+const reportComponent = readFileSync(
+  join(
+    dirname(fileURLToPath(import.meta.url)),
+    "../components/inspection-section-report.tsx",
+  ),
+  "utf8",
+);
+assert.match(
+  reportComponent,
+  /report\.notes/,
+  "section report must render saved notes",
+);
+
 assert.match(
   sectionSource,
   /This section can no longer be edited/,

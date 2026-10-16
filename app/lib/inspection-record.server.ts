@@ -29,6 +29,7 @@ import {
 } from "~/lib/inspection-workflow";
 import {
   buildInspectionSectionReport,
+  packSectionResponses,
   type InspectionSectionReportView,
 } from "~/lib/inspection-section-report";
 import { createInspectionActions } from "~/lib/inspections.server";
@@ -341,6 +342,7 @@ export async function getCompletedInspectionSectionReport(args: {
       id: true,
       inspectionId: true,
       status: true,
+      notes: true,
       sectionCompletions: {
         where: { sectionId: args.sectionId },
         take: 1,
@@ -373,6 +375,7 @@ export async function getCompletedInspectionSectionReport(args: {
     sectionTitle: section.title,
     sectionDefinition: definitionForSection(args.definition, args.sectionId),
     responses: completion.responses,
+    notesFallback: run.notes,
     signature: completion.signature,
     completedByName:
       completion.completedBy?.name?.trim() ||
@@ -501,7 +504,10 @@ export async function completeInspectionSection(args: {
           runId: args.runId,
           sectionId: args.sectionId,
           status: "COMPLETE",
-          responses: parsed.data.responses as unknown as Prisma.InputJsonValue,
+          responses: packSectionResponses({
+            answers: parsed.data.responses,
+            notes: parsed.data.notes,
+          }) as unknown as Prisma.InputJsonValue,
           signature: args.signature,
           operatorUserId: args.userId,
           completedById: args.userId,
