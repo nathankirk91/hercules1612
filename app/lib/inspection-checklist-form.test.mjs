@@ -30,6 +30,18 @@ assert.doesNotMatch(
   "Remove action must not override Conform remove with type=button",
 );
 
+assert.match(
+  source,
+  /form\.remove\.getButtonProps\(\{\s*name: fields\.actions\.name/,
+  "expected Conform remove control for actions",
+);
+
+assert.doesNotMatch(
+  source,
+  /actionFields\.length\s*>\s*1\s*\?/,
+  "every added action must be removable, including a single row",
+);
+
 assert.doesNotMatch(
   source,
   /who filled out this form/i,

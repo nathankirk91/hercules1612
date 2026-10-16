@@ -652,17 +652,15 @@ export function InspectionChecklistForm({
                   <div key={field.key} className="grid gap-2">
                     <div className="flex items-center justify-between gap-2">
                       <Label htmlFor={field.id}>Action {index + 1}</Label>
-                      {actionFields.length > 1 ? (
-                        <button
-                          className="text-xs font-medium text-muted-foreground underline-offset-4 hover:underline"
-                          {...form.remove.getButtonProps({
-                            name: fields.actions.name,
-                            index,
-                          })}
-                        >
-                          Remove
-                        </button>
-                      ) : null}
+                      <button
+                        className="text-xs font-medium text-muted-foreground underline-offset-4 hover:underline"
+                        {...form.remove.getButtonProps({
+                          name: fields.actions.name,
+                          index,
+                        })}
+                      >
+                        Remove
+                      </button>
                     </div>
                     <Textarea
                       id={field.id}
