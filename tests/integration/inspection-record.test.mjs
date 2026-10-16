@@ -88,7 +88,6 @@ const definition = {
   assert.equal(sectionOnly.questions.length, 1);
   const schema = createInspectionSchema(sectionOnly);
   const parsed = schema.safeParse({
-    operatorId: "op-1",
     notes: "",
     actions: [],
     sectionSignatures: { "sec-before": "JD" },
@@ -96,7 +95,6 @@ const definition = {
   });
   assert.equal(parsed.success, true);
   const missingAfter = schema.safeParse({
-    operatorId: "op-1",
     notes: "",
     actions: [],
     sectionSignatures: { "sec-before": "JD" },

@@ -29,7 +29,6 @@ import {
 } from "~/lib/inspection-workflow";
 import { createInspectionActions } from "~/lib/inspections.server";
 import { ensureInspectionSchema } from "~/lib/migrate.server";
-import { getActiveOperatorById } from "~/lib/operators.server";
 
 export type InspectionRecordSlotView = {
   shift: string | null;
@@ -325,7 +324,6 @@ export async function completeInspectionSection(args: {
   runId: string;
   sectionId: string;
   userId: string;
-  operatorId: string;
   responses: Record<string, string>;
   signature: string | null;
   notes: string | null;
@@ -340,11 +338,6 @@ export async function completeInspectionSection(args: {
   const prisma = getPrisma();
   if (!prisma) {
     throw new Error("Database is not configured.");
-  }
-
-  const operator = await getActiveOperatorById(args.operatorId);
-  if (!operator) {
-    throw new Error("Select a valid operator.");
   }
 
   const run = await prisma.inspectionRun.findUnique({
@@ -403,7 +396,6 @@ export async function completeInspectionSection(args: {
     isFirstInspectionOfWeek: args.isFirstInspectionOfWeek,
   });
   const parsed = schema.safeParse({
-    operatorId: args.operatorId,
     equipmentRef: run.equipmentRef ?? "",
     notes: args.notes ?? "",
     actions: args.actions,
@@ -448,7 +440,7 @@ export async function completeInspectionSection(args: {
           status: "COMPLETE",
           responses: parsed.data.responses as unknown as Prisma.InputJsonValue,
           signature: args.signature,
-          operatorUserId: operator.id,
+          operatorUserId: args.userId,
           completedById: args.userId,
           completedAt: now,
         },
@@ -517,7 +509,7 @@ export async function completeInspectionSection(args: {
     await tx.inspectionRun.update({
       where: { id: args.runId },
       data: {
-        operatorUserId: operator.id,
+        operatorUserId: args.userId,
         responses: answers as unknown as Prisma.InputJsonValue,
         sectionSignatures: sectionSignatures as unknown as Prisma.InputJsonValue,
         notes: notes || null,

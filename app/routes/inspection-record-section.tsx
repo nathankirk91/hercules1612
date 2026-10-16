@@ -21,7 +21,6 @@ import {
   isFirstInspectionOfWeek,
   listOpenInspectionActions,
 } from "~/lib/inspections.server";
-import { listActiveOperators } from "~/lib/operators.server";
 import { canReviewRuns } from "~/lib/roles";
 import { createInspectionSchema } from "~/lib/inspection.schema";
 import {
@@ -70,9 +69,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   const sectionDefinition = definitionForSection(definition, params.sectionId);
   const equipmentRef = record.equipmentRef;
-  const [operators, pendingCount, lastAnswersResult, openActions, firstOfWeek] =
+  const [pendingCount, lastAnswersResult, openActions, firstOfWeek] =
     await Promise.all([
-      listActiveOperators(),
       canReviewRuns(user.role) ? countPendingRuns() : Promise.resolve(0),
       getLastAnswersForInspection({
         inspectionId: definition.id,
@@ -97,7 +95,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     sectionDefinition,
     record,
     sectionTitle: item.section.title,
-    operators,
     pendingCount,
     equipmentRef,
     isFirstInspectionOfWeek: firstOfWeek,
@@ -141,7 +138,6 @@ export async function action({ request, params }: Route.ActionArgs) {
       runId: params.runId,
       sectionId: params.sectionId,
       userId: user.id,
-      operatorId: submission.value.operatorId,
       responses: submission.value.responses,
       signature,
       notes: submission.value.notes,
@@ -181,7 +177,6 @@ export default function InspectionRecordSectionPage({
     record,
     sectionTitle,
     user,
-    operators,
     pendingCount,
     equipmentRef,
     isFirstInspectionOfWeek,
@@ -214,7 +209,6 @@ export default function InspectionRecordSectionPage({
         </div>
         <InspectionChecklistForm
           definition={sectionDefinition}
-          operators={operators}
           selectedShift={record.shift}
           equipmentRef={equipmentRef}
           isFirstInspectionOfWeek={isFirstInspectionOfWeek}

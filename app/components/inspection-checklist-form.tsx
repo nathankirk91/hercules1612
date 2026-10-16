@@ -45,13 +45,11 @@ import {
   type InspectionSummary,
 } from "~/lib/inspections";
 import type { InspectionActionItem } from "~/lib/inspections.server";
-import type { OperatorOption } from "~/lib/operators.server";
 import { formatMelbourneDateTime } from "~/lib/datetime";
 import { cn } from "~/lib/utils";
 
 type Props = {
   definition: InspectionDefinition;
-  operators: OperatorOption[];
   /** Shift from the route loader (URL ?shift=). */
   selectedShift: string | null;
   /** Equipment from the route loader (fixed unit or ?equipmentRef=). */
@@ -70,7 +68,6 @@ type Props = {
 
 export function InspectionChecklistForm({
   definition,
-  operators,
   selectedShift,
   equipmentRef,
   isFirstInspectionOfWeek,
@@ -148,7 +145,6 @@ export function InspectionChecklistForm({
     shouldValidate: "onBlur",
     shouldRevalidate: "onInput",
     defaultValue: {
-      operatorId: "",
       equipmentRef: fixedEquipmentRef || equipmentRef || "",
       notes: "",
       actions: [],
@@ -607,7 +603,6 @@ export function InspectionChecklistForm({
                   </p>
                 </div>
                 <Button
-                  type="button"
                   variant="outline"
                   size="sm"
                   {...form.insert.getButtonProps({
@@ -659,7 +654,6 @@ export function InspectionChecklistForm({
                       <Label htmlFor={field.id}>Action {index + 1}</Label>
                       {actionFields.length > 1 ? (
                         <button
-                          type="button"
                           className="text-xs font-medium text-muted-foreground underline-offset-4 hover:underline"
                           {...form.remove.getButtonProps({
                             name: fields.actions.name,
@@ -705,32 +699,6 @@ export function InspectionChecklistForm({
               {fields.notes.errors ? (
                 <p className="text-sm text-destructive">
                   {fields.notes.errors.join(" ")}
-                </p>
-              ) : null}
-            </section>
-
-            <hr className="border-border/60" />
-
-            <section className="grid gap-2">
-              <Label htmlFor={fields.operatorId.id}>
-                Operator / who filled out this form
-              </Label>
-              <select
-                {...getSelectProps(fields.operatorId)}
-                key={fields.operatorId.key}
-                className="flex h-9 w-full rounded-lg border border-input bg-transparent px-3 py-1 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 aria-invalid:border-destructive"
-                required
-              >
-                <option value="">Select operator…</option>
-                {operators.map((operator) => (
-                  <option key={operator.id} value={operator.id}>
-                    {operator.name}
-                  </option>
-                ))}
-              </select>
-              {fields.operatorId.errors ? (
-                <p className="text-sm text-destructive">
-                  {fields.operatorId.errors.join(" ")}
                 </p>
               ) : null}
             </section>
