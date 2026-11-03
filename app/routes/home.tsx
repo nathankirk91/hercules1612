@@ -169,7 +169,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               Permits
             </h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Pending authorization and open permits.
+              Pending authorization, authorized personnel, and open permits.
             </p>
           </div>
           <PermitDashboard

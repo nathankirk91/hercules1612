@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 
 const {
+  PENDING_AUTHORIZATION_LABEL,
+  PENDING_AUTHORIZED_PERSONNEL_LABEL,
+  needsAuthorizedPersonnel,
   permitRecordHeading,
+  permitStatusBadges,
+  permitStatusLabel,
   workDescriptionFromAnswers,
 } = await import("./permit-display.ts");
 
@@ -54,6 +59,69 @@ const {
       permitNumber: "2608002",
     }),
     "#2608002",
+  );
+}
+
+{
+  assert.equal(permitStatusLabel("PENDING_AUTHORIZATION"), PENDING_AUTHORIZATION_LABEL);
+  assert.equal(needsAuthorizedPersonnel(0), true);
+  assert.equal(needsAuthorizedPersonnel(1), false);
+
+  const pendingBoth = permitStatusBadges({
+    status: "PENDING_AUTHORIZATION",
+    authorizedPersonnelCount: 0,
+  });
+  assert.deepEqual(
+    pendingBoth.map((badge) => badge.kind),
+    ["pending-authorization", "pending-authorized-personnel"],
+  );
+  assert.equal(pendingBoth[0].label, PENDING_AUTHORIZATION_LABEL);
+  assert.equal(pendingBoth[1].label, PENDING_AUTHORIZED_PERSONNEL_LABEL);
+
+  const pendingAuthOnly = permitStatusBadges({
+    status: "PENDING_AUTHORIZATION",
+    authorizedPersonnelCount: 2,
+  });
+  assert.deepEqual(
+    pendingAuthOnly.map((badge) => badge.kind),
+    ["pending-authorization"],
+  );
+
+  const openNeedsPersonnel = permitStatusBadges({
+    status: "OPEN",
+    authorizedPersonnelCount: 0,
+  });
+  assert.deepEqual(
+    openNeedsPersonnel.map((badge) => badge.kind),
+    ["open", "pending-authorized-personnel"],
+  );
+
+  const openReady = permitStatusBadges({
+    status: "OPEN",
+    authorizedPersonnelCount: 1,
+  });
+  assert.deepEqual(
+    openReady.map((badge) => badge.kind),
+    ["open"],
+  );
+
+  const closed = permitStatusBadges({
+    status: "CLOSED",
+    authorizedPersonnelCount: 0,
+  });
+  assert.deepEqual(
+    closed.map((badge) => badge.kind),
+    ["closed"],
+  );
+
+  const archived = permitStatusBadges({
+    status: "PENDING_AUTHORIZATION",
+    authorizedPersonnelCount: 0,
+    archivedAt: new Date("2026-01-01"),
+  });
+  assert.deepEqual(
+    archived.map((badge) => badge.kind),
+    ["archived"],
   );
 }
 

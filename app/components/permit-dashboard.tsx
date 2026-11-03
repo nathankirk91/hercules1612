@@ -1,6 +1,5 @@
 import { Link } from "react-router";
 
-import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
 import {
   Card,
@@ -10,6 +9,7 @@ import {
   CardTitle,
 } from "~/components/ui/card";
 import { PermitRecordCard } from "~/components/permit-record-card";
+import { needsAuthorizedPersonnel } from "~/lib/permit-display";
 import type { PermitRunListItem } from "~/lib/permits.server";
 import { cn } from "~/lib/utils";
 
@@ -21,14 +21,38 @@ type Props = {
   className?: string;
 };
 
+function activeSummary(
+  pendingPermits: PermitRunListItem[],
+  openPermits: PermitRunListItem[],
+): string {
+  const totalActive = pendingPermits.length + openPermits.length;
+  if (totalActive === 0) {
+    return "No active permits right now";
+  }
+
+  const pendingPersonnel = [...pendingPermits, ...openPermits].filter((run) =>
+    needsAuthorizedPersonnel(run.authorizedPersonnelCount),
+  ).length;
+
+  return [
+    pendingPermits.length > 0
+      ? `${pendingPermits.length} pending authorization`
+      : null,
+    pendingPersonnel > 0
+      ? `${pendingPersonnel} pending authorized personnel`
+      : null,
+    openPermits.length > 0 ? `${openPermits.length} open` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
 export function PermitDashboard({
   pendingPermits,
   openPermits,
   compact = false,
   className,
 }: Props) {
-  const totalActive = pendingPermits.length + openPermits.length;
-
   if (compact) {
     return (
       <Card className={cn(className)}>
@@ -39,18 +63,7 @@ export function PermitDashboard({
                 Permits
               </CardTitle>
               <CardDescription className="mt-1">
-                {totalActive === 0
-                  ? "No active permits right now"
-                  : [
-                      pendingPermits.length > 0
-                        ? `${pendingPermits.length} pending authorization`
-                        : null,
-                      openPermits.length > 0
-                        ? `${openPermits.length} open`
-                        : null,
-                    ]
-                      .filter(Boolean)
-                      .join(" · ")}
+                {activeSummary(pendingPermits, openPermits)}
               </CardDescription>
             </div>
             <Button asChild variant="outline" size="sm">
@@ -63,14 +76,12 @@ export function PermitDashboard({
             heading="Pending authorization"
             empty="None waiting for sign-off."
             permits={pendingPermits}
-            status="pending"
             limit={5}
           />
           <PermitList
             heading="Open"
             empty="None open for close-out."
             permits={openPermits}
-            status="open"
             limit={5}
           />
           <div className="flex flex-wrap gap-2">
@@ -97,13 +108,13 @@ export function PermitDashboard({
             Pending authorization
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Waiting for the required authorisation signatures before work can
-            start (2 or 3, depending on the permit type).
+            Waiting for the required authorisation signatures (2 or 3,
+            depending on the permit type) and at least one Authorized Personnel
+            Performing Work entry before work is fully ready.
           </p>
         </div>
         <PermitList
           permits={pendingPermits}
-          status="pending"
           empty="No permits waiting for authorization."
         />
       </section>
@@ -119,12 +130,13 @@ export function PermitDashboard({
           <p className="mt-1 text-sm text-muted-foreground">
             Authorized permits in progress (max 12 hours from start to end).
             Close out when work is finished; remaining sign-offs can still be
-            added when only two were required to open.
+            added when only two were required to open. Permits still missing
+            Authorized Personnel Performing Work show that badge until at least
+            one person is recorded.
           </p>
         </div>
         <PermitList
           permits={openPermits}
-          status="open"
           empty="No open permits right now."
         />
       </section>
@@ -135,13 +147,11 @@ export function PermitDashboard({
 function PermitList({
   heading,
   permits,
-  status,
   empty,
   limit,
 }: {
   heading?: string;
   permits: PermitRunListItem[];
-  status: "pending" | "open";
   empty: string;
   limit?: number;
 }) {
@@ -165,17 +175,7 @@ function PermitList({
       {items.length > 0 ? (
         <ul className="grid gap-3">
           {items.map((permit) => (
-            <PermitRecordCard
-              key={permit.id}
-              run={permit}
-              statusBadge={{
-                label: status === "pending" ? "Pending authorization" : "Open",
-                className: cn(
-                  status === "pending" && "border-sky-600/40 text-sky-800",
-                  status === "open" && "border-amber-600/40 text-amber-800",
-                ),
-              }}
-            />
+            <PermitRecordCard key={permit.id} run={permit} />
           ))}
         </ul>
       ) : (
