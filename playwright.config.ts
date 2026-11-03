@@ -17,7 +17,10 @@ export default defineConfig({
   projects: [
     {
       name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
+      use: {
+        ...devices["Desktop Chrome"],
+        launchOptions: { chromiumSandbox: true },
+      },
     },
   ],
   webServer: process.env.E2E_BASE_URL
