@@ -30,6 +30,7 @@ import type {
   PermitCloseout,
 } from "~/lib/permit.schema";
 import {
+  authorizedPersonnelBlockedReason,
   emptyPermitAuthorization,
   formatPermitNumber,
   isPermitAuthSlotSigned,
@@ -692,11 +693,12 @@ export async function appendAuthorizedPersonnel(args: {
   if (!existing) {
     throw new Error("Permit not found.");
   }
-  if (existing.archivedAt) {
-    throw new Error("Archived permits cannot accept authorized personnel.");
-  }
-  if (existing.status === "CLOSED") {
-    throw new Error("Closed permits cannot accept authorized personnel.");
+  const blocked = authorizedPersonnelBlockedReason({
+    status: existing.status,
+    archivedAt: existing.archivedAt,
+  });
+  if (blocked) {
+    throw new Error(blocked);
   }
 
   const current = parseAuthorizedPersonnel(existing.authorizedPersonnel);
