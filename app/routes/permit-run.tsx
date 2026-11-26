@@ -36,6 +36,7 @@ import {
   resolvePermitFieldRole,
   type InspectionAnswerRecord,
 } from "~/lib/inspections";
+import { permitStatusBadges } from "~/lib/permit-display";
 import {
   AUTHORIZED_PERSONNEL_TITLE,
   createAddAuthorizedPersonnelSchema,
@@ -58,7 +59,6 @@ import {
   signOffPermitSlot,
 } from "~/lib/permits.server";
 import { canArchiveRuns, canReviewRuns } from "~/lib/roles";
-import { cn } from "~/lib/utils";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -377,29 +377,19 @@ export default function PermitRunPage({
       <main className="app-main">
         <div className="mb-8">
           <div className="mb-3 flex flex-wrap items-center gap-2">
-            {isArchived ? (
+            {permitStatusBadges({
+              status: run.status,
+              authorizedPersonnelCount: run.authorizedPersonnel.length,
+              archivedAt: run.archivedAt,
+            }).map((badge) => (
               <Badge
+                key={badge.kind}
                 variant="outline"
-                className="border-muted-foreground/40 text-muted-foreground"
+                className={badge.className}
               >
-                Archived
+                {badge.label}
               </Badge>
-            ) : (
-              <Badge
-                variant="outline"
-                className={cn(
-                  isPending && "border-sky-600/40 text-sky-800",
-                  isOpen && "border-amber-600/40 text-amber-800",
-                  isClosed && "border-emerald-600/40 text-emerald-700",
-                )}
-              >
-                {isPending
-                  ? "Pending authorization"
-                  : isOpen
-                    ? "Open"
-                    : "Closed"}
-              </Badge>
-            )}
+            ))}
             <Link
               to="/permits/history"
               className="text-sm text-muted-foreground underline-offset-4 hover:underline"
