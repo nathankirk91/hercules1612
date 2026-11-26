@@ -20,7 +20,10 @@ import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { formatMelbourneYmd } from "~/lib/datetime";
 import { overCapacityWarning } from "~/lib/tank-levels";
-import { tankDaySaveSchema } from "~/lib/tank-levels.schema";
+import {
+  tankDaySaveSchema,
+  tankLevelFieldName,
+} from "~/lib/tank-levels.schema";
 import type { TankDayRow } from "~/lib/tank-levels.server";
 import { cn } from "~/lib/utils";
 
@@ -62,8 +65,9 @@ export function TankLevelsDayForm({
     onValidate({ formData }) {
       return parseWithZod(formData, { schema: tankDaySaveSchema });
     },
+    // Validate only after the user leaves a field (and on submit).
     shouldValidate: "onBlur",
-    shouldRevalidate: "onInput",
+    shouldRevalidate: "onBlur",
     defaultValue: {
       day,
       levelKg: defaultLevelKg,
@@ -157,7 +161,7 @@ export function TankLevelsDayForm({
                     (row.levelKg != null
                       ? overCapacityWarning(row.levelKg, row.capacityKg)
                       : null);
-                  const inputName = `levelKg[${row.id}]`;
+                  const inputName = tankLevelFieldName(row.id);
                   return (
                     <tr key={row.id} className="border-b last:border-0">
                       <td className="px-3 py-2 font-medium text-brand-navy">

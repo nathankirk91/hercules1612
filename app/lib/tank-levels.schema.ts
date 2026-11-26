@@ -19,8 +19,11 @@ const optionalNonNegativeKg = z.preprocess(
 );
 
 /**
- * Day log: `day` plus `levelKg[<tankId>]` fields.
- * Empty values are skipped (do not wipe existing readings).
+ * Day log: `day` plus `levelKg.<tankId>` fields.
+ *
+ * Conform's path parser only accepts numeric brackets (`items[0]`), so cuid
+ * keys must use dot notation (`levelKg.cm…`). Empty values are skipped (do
+ * not wipe existing readings).
  */
 export const tankDaySaveSchema = z
   .object({
@@ -41,6 +44,11 @@ export const tankDaySaveSchema = z
   });
 
 export type TankDaySaveValue = z.infer<typeof tankDaySaveSchema>;
+
+/** Form field name for a tank level input (Conform-compatible). */
+export function tankLevelFieldName(tankId: string): string {
+  return `levelKg.${tankId}`;
+}
 
 export const tankUpsertSchema = z.object({
   intent: z.enum(["create", "update"]),
