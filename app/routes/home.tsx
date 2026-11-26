@@ -7,6 +7,7 @@ import { AppHeader } from "~/components/app-header";
 import { CatalogLinkCard } from "~/components/catalog-link-card";
 import { ForkliftDayDashboardCard } from "~/components/forklift-day-dashboard";
 import { PermitDashboard } from "~/components/permit-dashboard";
+import { TankLevelsHomeCard } from "~/components/tank-levels-home-card";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
@@ -28,6 +29,7 @@ import {
   listPendingAuthorizationPermitRuns,
 } from "~/lib/permits.server";
 import { canReviewRuns } from "~/lib/roles";
+import { getTankDaySummary } from "~/lib/tank-levels.server";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -58,12 +60,13 @@ export async function loader({ request }: Route.LoaderArgs) {
     }
   }
 
-  const [pendingCount, forkliftDay, pendingPermits, openPermits] =
+  const [pendingCount, forkliftDay, pendingPermits, openPermits, tankLevels] =
     await Promise.all([
       canReviewRuns(user.role) ? countPendingRuns() : Promise.resolve(0),
       listForkliftChecksForDay(date),
       listPendingAuthorizationPermitRuns({ limit: 10 }),
       listOpenPermitRuns({ limit: 10 }),
+      getTankDaySummary(date),
     ]);
 
   if (!prisma) {
@@ -74,6 +77,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       forkliftDay,
       pendingPermits,
       openPermits,
+      tankLevels,
       date,
       source: "fallback" as const,
     };
@@ -112,6 +116,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       forkliftDay,
       pendingPermits,
       openPermits,
+      tankLevels,
       date,
       source: "prisma" as const,
     };
@@ -123,6 +128,7 @@ export async function loader({ request }: Route.LoaderArgs) {
       forkliftDay,
       pendingPermits,
       openPermits,
+      tankLevels,
       date,
       source: "fallback" as const,
     };
@@ -137,6 +143,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     forkliftDay,
     pendingPermits,
     openPermits,
+    tankLevels,
     date,
   } = loaderData;
   const dayLabel = formatMelbourneYmd(date) ?? date;
@@ -229,6 +236,24 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               <Link to="/inspections">All checklists</Link>
             </Button>
           </div>
+        </section>
+
+        <section
+          aria-labelledby="tank-levels-heading"
+          className="mb-14 animate-in fade-in slide-in-from-bottom-2 duration-500"
+        >
+          <div className="mb-4">
+            <h2
+              id="tank-levels-heading"
+              className="font-heading text-2xl font-semibold tracking-tight text-brand-navy"
+            >
+              Tank levels
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Bulk tank readings for {dayLabel}.
+            </p>
+          </div>
+          <TankLevelsHomeCard summary={tankLevels} />
         </section>
 
         <section

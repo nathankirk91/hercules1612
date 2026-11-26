@@ -30,6 +30,7 @@ assert.deepEqual(navLabels(operatorNav), [
   "Home",
   "Permits",
   "Inspections",
+  "Tank levels",
   "Calculations",
 ]);
 assert.equal(operatorNav.some((item) => item.label === "Approvals"), false);
@@ -53,6 +54,7 @@ assert.deepEqual(navLabels(managerNav), [
   "Home",
   "Permits",
   "Inspections",
+  "Tank levels",
   "Calculations",
   "Settings",
 ]);

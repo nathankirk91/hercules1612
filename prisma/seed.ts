@@ -12,6 +12,7 @@ import {
   ensureRolesAndSignOffDefaults,
   HSOLENIS_OPERATOR_ROLE_SLUG,
 } from "../app/lib/roles.server";
+import { DEFAULT_TANKS } from "../app/lib/tank-levels";
 
 const connectionString = process.env.DATABASE_URL;
 
@@ -217,10 +218,38 @@ async function main() {
     });
   }
 
+  for (const tank of DEFAULT_TANKS) {
+    const existing = await prisma.tank.findUnique({
+      where: { code: tank.code },
+      select: { id: true },
+    });
+    if (existing) {
+      await prisma.tank.update({
+        where: { code: tank.code },
+        data: {
+          product: tank.product,
+          capacityKg: tank.capacityKg,
+          sortOrder: tank.sortOrder,
+        },
+      });
+    } else {
+      await prisma.tank.create({
+        data: {
+          code: tank.code,
+          product: tank.product,
+          capacityKg: tank.capacityKg,
+          sortOrder: tank.sortOrder,
+          isActive: true,
+        },
+      });
+    }
+  }
+
   console.log(`Seeded ${POLYMER_ADIPIC_DETA_PRODUCTS.length} calculations`);
   console.log(
     `Seeded ${INSPECTION_DEFINITIONS.length} inspections with questions`,
   );
+  console.log(`Seeded ${DEFAULT_TANKS.length} bulk tanks`);
 
   await ensureRolesAndSignOffDefaults();
 

@@ -240,6 +240,12 @@ export function buildNavItems({
   });
 
   items.push({
+    type: "link",
+    to: "/tank-levels",
+    label: "Tank levels",
+  });
+
+  items.push({
     type: "group",
     id: "calculations",
     label: "Calculations",

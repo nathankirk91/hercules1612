@@ -77,3 +77,8 @@ export function canArchiveRuns(role: UserRole): boolean {
 export function canDeleteUnusedForms(role: UserRole): boolean {
   return role === "ADMIN";
 }
+
+/** Admin-only tank roster management (daily bulk tank levels). */
+export function canManageTanks(role: UserRole): boolean {
+  return role === "ADMIN";
+}
