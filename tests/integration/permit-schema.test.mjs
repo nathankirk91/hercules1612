@@ -7,7 +7,11 @@ import assert from "node:assert/strict";
  */
 const { SAFE_WORK_PERMIT } = await import("../../app/lib/inspections.ts");
 const {
+  AUTHORIZED_PERSONNEL_ARCHIVED_ERROR,
+  AUTHORIZED_PERSONNEL_CLOSED_ERROR,
   AUTHORIZED_PERSONNEL_TITLE,
+  authorizedPersonnelBlockedReason,
+  canAcceptAuthorizedPersonnel,
   createAddAuthorizedPersonnelSchema,
   createPermitCloseoutSchema,
   createPermitIssueSchema,
@@ -153,6 +157,37 @@ function fillRequired(definition, overrides = {}) {
     parsed.error.issues.some((issue) =>
       String(issue.message).includes("12 hours"),
     ),
+  );
+}
+
+{
+  assert.equal(
+    canAcceptAuthorizedPersonnel({ status: "PENDING_AUTHORIZATION" }),
+    true,
+  );
+  assert.equal(canAcceptAuthorizedPersonnel({ status: "OPEN" }), true);
+  assert.equal(canAcceptAuthorizedPersonnel({ status: "CLOSED" }), false);
+  assert.equal(
+    canAcceptAuthorizedPersonnel({
+      status: "OPEN",
+      archivedAt: new Date("2026-01-01"),
+    }),
+    false,
+  );
+  assert.equal(
+    authorizedPersonnelBlockedReason({ status: "CLOSED" }),
+    AUTHORIZED_PERSONNEL_CLOSED_ERROR,
+  );
+  assert.equal(
+    authorizedPersonnelBlockedReason({
+      status: "OPEN",
+      archivedAt: "2026-01-01",
+    }),
+    AUTHORIZED_PERSONNEL_ARCHIVED_ERROR,
+  );
+  assert.equal(
+    authorizedPersonnelBlockedReason({ status: "OPEN" }),
+    null,
   );
 }
 
