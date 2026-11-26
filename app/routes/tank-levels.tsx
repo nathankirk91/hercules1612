@@ -26,6 +26,7 @@ import {
   saveTankDayLevels,
   seedDefaultTanks,
 } from "~/lib/tank-levels.server";
+import { redirectWithToast } from "~/lib/toast.server";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -110,21 +111,13 @@ export async function action({ request }: Route.ActionArgs) {
     }
   }
 
+  let saved = 0;
   try {
-    const { saved } = await saveTankDayLevels({
+    ({ saved } = await saveTankDayLevels({
       day,
       entries,
       recordedById: user.id,
-    });
-    return {
-      result: submission.reply(),
-      formError: null,
-      message:
-        saved === 0
-          ? "Nothing to save — enter at least one level."
-          : `Saved ${saved} tank level${saved === 1 ? "" : "s"}.`,
-      warnings,
-    };
+    }));
   } catch (error) {
     return data(
       {
@@ -141,6 +134,23 @@ export async function action({ request }: Route.ActionArgs) {
       { status: 400 },
     );
   }
+
+  if (saved === 0) {
+    return {
+      result: submission.reply(),
+      formError: null,
+      message: "Nothing to save — enter at least one level.",
+      warnings,
+    };
+  }
+
+  // Redirect so the loader remounts with persisted values (uncontrolled
+  // inputs only pick up new defaultValue after a fresh navigation).
+  return redirectWithToast(`/tank-levels?date=${encodeURIComponent(day)}`, {
+    type: "success",
+    title: "Tank levels saved",
+    description: `Saved ${saved} tank level${saved === 1 ? "" : "s"}.`,
+  });
 }
 
 export default function TankLevelsPage({

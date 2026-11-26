@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
+import { parseWithZod } from "@conform-to/zod/v4";
 
-const { tankDaySaveSchema, tankUpsertSchema } = await import(
-  "../../app/lib/tank-levels.schema.ts"
-);
+const {
+  tankDaySaveSchema,
+  tankUpsertSchema,
+  tankLevelFieldName,
+} = await import("../../app/lib/tank-levels.schema.ts");
 
 const dayOk = tankDaySaveSchema.safeParse({
   day: "2026-11-27",
@@ -55,5 +58,39 @@ const createMissingProduct = tankUpsertSchema.safeParse({
   capacityKg: "100",
 });
 assert.equal(createMissingProduct.success, false);
+
+const cuid = "cmwy45buj000008jym8i85ewk";
+assert.equal(tankLevelFieldName(cuid), `levelKg.${cuid}`);
+
+// Conform drops bracket keys with non-numeric segments (cuids). Dot notation
+// is required for levelKg.<tankId> to appear in the parsed payload.
+{
+  const broken = new FormData();
+  broken.set("day", "2026-11-27");
+  broken.set(`levelKg[${cuid}]`, "12345");
+  const brokenSubmission = parseWithZod(broken, { schema: tankDaySaveSchema });
+  assert.equal(brokenSubmission.status, "success");
+  if (brokenSubmission.status === "success") {
+    assert.deepEqual(
+      brokenSubmission.value.entries,
+      [],
+      "bracket cuid keys must not silently parse as entries",
+    );
+  }
+}
+
+{
+  const ok = new FormData();
+  ok.set("day", "2026-11-27");
+  ok.set(tankLevelFieldName(cuid), "12345");
+  ok.set(tankLevelFieldName("other"), "");
+  const okSubmission = parseWithZod(ok, { schema: tankDaySaveSchema });
+  assert.equal(okSubmission.status, "success");
+  if (okSubmission.status === "success") {
+    assert.deepEqual(okSubmission.value.entries, [
+      { tankId: cuid, levelKg: 12345 },
+    ]);
+  }
+}
 
 console.log("tank-levels schema integration tests passed");
