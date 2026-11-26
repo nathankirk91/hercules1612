@@ -138,9 +138,6 @@ export function createInspectionFormSchema(
 
   return z
     .object({
-      operatorId: z
-        .string({ error: "Select who is doing this inspection." })
-        .min(1, "Select who is doing this inspection."),
       equipmentRef: z.preprocess(
         emptyToUndefined,
         z
@@ -287,7 +284,6 @@ export function createInspectionSchema(
         .at(-1) ?? "";
 
     return {
-      operatorId: value.operatorId,
       equipmentRef: definition.fixedEquipmentRef ?? value.equipmentRef ?? null,
       notes: value.notes ?? null,
       actions: value.actions.map((item) => item.trim()).filter(Boolean),

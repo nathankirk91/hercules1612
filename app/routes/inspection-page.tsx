@@ -27,7 +27,6 @@ import {
   isFirstInspectionOfWeek,
   listOpenInspectionActions,
 } from "~/lib/inspections.server";
-import { listActiveOperators } from "~/lib/operators.server";
 import { canReviewRuns } from "~/lib/roles";
 
 /** Prefer /permits/:slug so stale DB hrefs cannot cause a redirect loop. */
@@ -83,7 +82,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     ]);
     return {
       user,
-      operators: [],
       pendingCount,
       definition,
       selectedShift: shiftParam,
@@ -105,9 +103,8 @@ export async function loader({ request, params }: Route.LoaderArgs) {
     (question) => question.firstOfWeekOnly,
   );
 
-  const [operators, pendingCount, lastAnswersResult, openActions, firstOfWeek] =
+  const [pendingCount, lastAnswersResult, openActions, firstOfWeek] =
     await Promise.all([
-      listActiveOperators(),
       canReviewRuns(user.role) ? countPendingRuns() : Promise.resolve(0),
       canLoadScopedData
         ? getLastAnswersForInspection({
@@ -136,7 +133,6 @@ export async function loader({ request, params }: Route.LoaderArgs) {
 
   return {
     user,
-    operators,
     pendingCount,
     definition,
     selectedShift: shiftParam,
@@ -205,7 +201,6 @@ export default function InspectionPage({
   const {
     definition,
     user,
-    operators,
     pendingCount,
     selectedShift,
     equipmentRef,
@@ -264,7 +259,6 @@ export default function InspectionPage({
           ) : (
             <InspectionChecklistForm
               definition={definition}
-              operators={operators}
               selectedShift={selectedShift}
               equipmentRef={equipmentRef}
               isFirstInspectionOfWeek={isFirstInspectionOfWeek}

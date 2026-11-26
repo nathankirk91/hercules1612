@@ -27,9 +27,13 @@ import {
   type SectionCompletion,
   type SectionProgressItem,
 } from "~/lib/inspection-workflow";
+import {
+  buildInspectionSectionReport,
+  packSectionResponses,
+  type InspectionSectionReportView,
+} from "~/lib/inspection-section-report";
 import { createInspectionActions } from "~/lib/inspections.server";
 import { ensureInspectionSchema } from "~/lib/migrate.server";
-import { getActiveOperatorById } from "~/lib/operators.server";
 
 export type InspectionRecordSlotView = {
   shift: string | null;
@@ -320,12 +324,72 @@ export async function getInspectionRecordDetail(args: {
   };
 }
 
+/** Read-only report for a completed section on an in-progress (or finished) record. */
+export async function getCompletedInspectionSectionReport(args: {
+  definition: InspectionDefinition;
+  runId: string;
+  sectionId: string;
+}): Promise<InspectionSectionReportView | null> {
+  await ensureInspectionSchema();
+  const prisma = getPrisma();
+  if (!prisma) {
+    return null;
+  }
+
+  const run = await prisma.inspectionRun.findUnique({
+    where: { id: args.runId },
+    select: {
+      id: true,
+      inspectionId: true,
+      status: true,
+      notes: true,
+      sectionCompletions: {
+        where: { sectionId: args.sectionId },
+        take: 1,
+        include: {
+          completedBy: { select: { name: true, email: true } },
+        },
+      },
+    },
+  });
+  if (!run || run.inspectionId !== args.definition.id) {
+    return null;
+  }
+  if (run.status === "VOIDED") {
+    return null;
+  }
+
+  const completion = run.sectionCompletions[0];
+  if (!completion || completion.status !== "COMPLETE") {
+    return null;
+  }
+
+  const section = resolveInspectionSections(args.definition).find(
+    (item) => item.id === args.sectionId,
+  );
+  if (!section) {
+    return null;
+  }
+
+  return buildInspectionSectionReport({
+    sectionTitle: section.title,
+    sectionDefinition: definitionForSection(args.definition, args.sectionId),
+    responses: completion.responses,
+    notesFallback: run.notes,
+    signature: completion.signature,
+    completedByName:
+      completion.completedBy?.name?.trim() ||
+      completion.completedBy?.email ||
+      null,
+    completedAt: completion.completedAt,
+  });
+}
+
 export async function completeInspectionSection(args: {
   definition: InspectionDefinition;
   runId: string;
   sectionId: string;
   userId: string;
-  operatorId: string;
   responses: Record<string, string>;
   signature: string | null;
   notes: string | null;
@@ -340,11 +404,6 @@ export async function completeInspectionSection(args: {
   const prisma = getPrisma();
   if (!prisma) {
     throw new Error("Database is not configured.");
-  }
-
-  const operator = await getActiveOperatorById(args.operatorId);
-  if (!operator) {
-    throw new Error("Select a valid operator.");
   }
 
   const run = await prisma.inspectionRun.findUnique({
@@ -403,7 +462,6 @@ export async function completeInspectionSection(args: {
     isFirstInspectionOfWeek: args.isFirstInspectionOfWeek,
   });
   const parsed = schema.safeParse({
-    operatorId: args.operatorId,
     equipmentRef: run.equipmentRef ?? "",
     notes: args.notes ?? "",
     actions: args.actions,
@@ -446,9 +504,12 @@ export async function completeInspectionSection(args: {
           runId: args.runId,
           sectionId: args.sectionId,
           status: "COMPLETE",
-          responses: parsed.data.responses as unknown as Prisma.InputJsonValue,
+          responses: packSectionResponses({
+            answers: parsed.data.responses,
+            notes: parsed.data.notes,
+          }) as unknown as Prisma.InputJsonValue,
           signature: args.signature,
-          operatorUserId: operator.id,
+          operatorUserId: args.userId,
           completedById: args.userId,
           completedAt: now,
         },
@@ -517,7 +578,7 @@ export async function completeInspectionSection(args: {
     await tx.inspectionRun.update({
       where: { id: args.runId },
       data: {
-        operatorUserId: operator.id,
+        operatorUserId: args.userId,
         responses: answers as unknown as Prisma.InputJsonValue,
         sectionSignatures: sectionSignatures as unknown as Prisma.InputJsonValue,
         notes: notes || null,
