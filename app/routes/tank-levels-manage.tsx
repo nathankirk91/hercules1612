@@ -171,11 +171,16 @@ export default function TankLevelsManagePage({
                 <input type="hidden" name="intent" value="create" />
                 <div className="grid gap-1.5">
                   <Label htmlFor="new-code">Code</Label>
-                  <Input id="new-code" name="code" required />
+                  <Input id="new-code" name="code" required className="h-11" />
                 </div>
                 <div className="grid gap-1.5">
                   <Label htmlFor="new-product">Product</Label>
-                  <Input id="new-product" name="product" required />
+                  <Input
+                    id="new-product"
+                    name="product"
+                    required
+                    className="h-11"
+                  />
                 </div>
                 <div className="grid gap-1.5">
                   <Label htmlFor="new-capacity">Capacity (kg)</Label>
@@ -186,6 +191,7 @@ export default function TankLevelsManagePage({
                     min={1}
                     step={1}
                     required
+                    className="h-11"
                   />
                 </div>
                 <div className="grid gap-1.5">
@@ -196,24 +202,32 @@ export default function TankLevelsManagePage({
                     type="number"
                     step={1}
                     defaultValue={0}
+                    className="h-11"
                   />
                 </div>
-                <label className="flex items-center gap-2 text-sm">
+                <label className="flex min-h-11 items-center gap-3 text-sm">
                   <input
                     type="checkbox"
                     name="isActive"
                     value="on"
                     defaultChecked
-                    className="size-4 rounded border"
+                    className="size-5 rounded border"
                   />
                   Active
                 </label>
-                <Button type="submit">Add tank</Button>
+                <Button type="submit" size="lg" className="min-h-11 w-full">
+                  Add tank
+                </Button>
               </Form>
 
               <Form method="post">
                 <input type="hidden" name="intent" value="seed-defaults" />
-                <Button type="submit" variant="secondary" className="w-full">
+                <Button
+                  type="submit"
+                  variant="secondary"
+                  size="lg"
+                  className="min-h-11 w-full"
+                >
                   Sync seed roster
                 </Button>
               </Form>
@@ -252,6 +266,7 @@ export default function TankLevelsManagePage({
                         name="code"
                         defaultValue={tank.code}
                         required
+                        className="h-11"
                       />
                     </div>
                     <div className="grid gap-1.5">
@@ -261,6 +276,7 @@ export default function TankLevelsManagePage({
                         name="product"
                         defaultValue={tank.product}
                         required
+                        className="h-11"
                       />
                     </div>
                     <div className="grid gap-1.5">
@@ -275,6 +291,7 @@ export default function TankLevelsManagePage({
                         step={1}
                         defaultValue={tank.capacityKg}
                         required
+                        className="h-11"
                       />
                     </div>
                     <div className="grid gap-1.5">
@@ -285,20 +302,26 @@ export default function TankLevelsManagePage({
                         type="number"
                         step={1}
                         defaultValue={tank.sortOrder}
+                        className="h-11"
                       />
                     </div>
                   </div>
-                  <label className="flex items-center gap-2 text-sm">
+                  <label className="flex min-h-11 items-center gap-3 text-sm">
                     <input
                       type="checkbox"
                       name="isActive"
                       value="on"
                       defaultChecked={tank.isActive}
-                      className="size-4 rounded border"
+                      className="size-5 rounded border"
                     />
                     Active
                   </label>
-                  <Button type="submit" variant="outline" size="sm">
+                  <Button
+                    type="submit"
+                    variant="outline"
+                    size="lg"
+                    className="min-h-11 w-full sm:w-auto"
+                  >
                     Save {tank.code}
                   </Button>
                 </Form>
