@@ -165,7 +165,7 @@ export default function TankLevelsPage({
     <div className="app-shell">
       <AppHeader user={user} pendingCount={pendingCount} />
       <main className="app-main">
-        <section className="mb-8 max-w-2xl">
+        <section className="mb-6 max-w-2xl sm:mb-8">
           <h1 className="font-heading text-3xl font-semibold tracking-tight text-brand-navy sm:text-4xl">
             Tank levels
           </h1>
