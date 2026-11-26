@@ -120,6 +120,7 @@ model User {
   notificationPreferences    UserNotificationPreference[]
   roleAssignments            UserRoleAssignment[]
   assignedRolesBy            UserRoleAssignment[] @relation("RoleAssignedBy")
+  tankLevelReadings          TankLevelReading[]  @relation("TankLevelRecordedBy")
 
   @@map("users")
 }
@@ -504,4 +505,38 @@ model UserNotificationPreference {
   @@id([userId, type])
   @@index([type, enabled])
   @@map("user_notification_preferences")
+}
+
+/// Bulk tank roster (product + capacity). Codes stored without trailing *.
+model Tank {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  product     String
+  capacityKg  Int      @map("capacity_kg")
+  sortOrder   Int      @default(0) @map("sort_order")
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  readings    TankLevelReading[]
+
+  @@index([isActive, sortOrder])
+  @@map("tanks")
+}
+
+/// One kg reading per tank per Melbourne civil day (YYYY-MM-DD).
+model TankLevelReading {
+  id           String   @id @default(cuid())
+  tankId       String   @map("tank_id")
+  tank         Tank     @relation(fields: [tankId], references: [id], onDelete: Restrict)
+  day          String
+  levelKg      Int      @map("level_kg")
+  recordedById String?  @map("recorded_by_id")
+  recordedBy   User?    @relation("TankLevelRecordedBy", fields: [recordedById], references: [id], onDelete: SetNull)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([tankId, day])
+  @@index([day])
+  @@index([day, tankId])
+  @@map("tank_level_readings")
 }

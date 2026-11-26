@@ -55,6 +55,20 @@ test.describe("authentication gates", () => {
     await expect(page).toHaveURL(/\/login/);
   });
 
+  test("tank levels page redirects unauthenticated users to login", async ({
+    page,
+  }) => {
+    await page.goto("/tank-levels");
+    await expect(page).toHaveURL(/\/login/);
+  });
+
+  test("tank levels manage page redirects unauthenticated users to login", async ({
+    page,
+  }) => {
+    await page.goto("/tank-levels/manage");
+    await expect(page).toHaveURL(/\/login/);
+  });
+
   test("login form shows validation errors for empty submit", async ({
     page,
   }) => {
